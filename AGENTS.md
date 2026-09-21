@@ -5,6 +5,9 @@
 > Copilot, and any other agent). `CLAUDE.md` and `GEMINI.md` only add assistant-specific deltas
 > and point back here. When a rule needs to change, change it HERE — never re-fork it into an
 > assistant-specific file.
+>
+> **Hermes Agent Autonomous Onboarding & Upgrade:** For autonomous Hermes agent integration,
+> in-place upgrades, and persistent memory setup, see [`HERMES_AGENT.md`](HERMES_AGENT.md).
 
 ## Quick Start
 

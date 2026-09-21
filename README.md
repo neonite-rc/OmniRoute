@@ -1,7 +1,7 @@
 # OmniRoute — `fork/parallel-execution`
 
 > **Original upstream readme:** [`Base-readme.md`](Base-readme.md)
-> **Design constitution:** [`CORE.md`](CORE.md) · **Upgrade playbook:** [`UPGRADE.md`](UPGRADE.md) · **Hermes wiring:** [`HERMES_CHANGES.md`](HERMES_CHANGES.md)
+> **Design constitution:** [`CORE.md`](CORE.md) · **Upgrade playbook:** [`UPGRADE.md`](UPGRADE.md) · **Hermes wiring:** [`HERMES_CHANGES.md`](HERMES_CHANGES.md) · **Autonomous Agent Guide:** [`HERMES_AGENT.md`](HERMES_AGENT.md)
 
 This branch is a deployment-and-integration fork of the upstream OmniRoute.
 It is tuned for running **parallel AI coding agents** (main agent + concurrent
@@ -12,6 +12,20 @@ Constitution and long-form design live outside this repo (operator docs):
 `CORE.md` (design constitution) and `OmniRoute_Hermes_CORE.md` (architecture
 and upgrade contract). When any document disagrees with code, code wins for
 what exists today — fix the loser in the same change.
+
+## Autonomous Agent Integration (Hermes & Coding Agents)
+
+If you use Hermes Agent or another autonomous coding agent, the agent can autonomously upgrade an existing base OmniRoute installation and configure subagent federation with one command:
+
+```bash
+./bin/hermes-agent-integrate.sh --yes
+```
+
+**Architectural Principle**:
+- **Main Agent Brain**: Stays **CONSTANT** on your chosen primary model (e.g., Claude 3.5 Sonnet, GPT-4o). It is never pointed to OmniRoute auto-routing for direct dialog.
+- **Subagent Federation**: OmniRoute is reserved exclusively for subagents, delegation, and parallel swarms across multiple providers (Kiro, NIM, Anthropic, OpenAI, DeepSeek, etc.).
+- **Memory Injection**: Persists operational knowledge to `~/.hermes/memories/omniroute-superpowers.md` so the agent permanently recalls its subagent superpowers.
+- See [`HERMES_AGENT.md`](HERMES_AGENT.md) for full instructions.
 
 ## How this fork differs from upstream
 

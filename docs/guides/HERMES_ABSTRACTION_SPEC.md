@@ -53,10 +53,10 @@
 `hermes config edit`:
 
 ```yaml
-# Brain: pointed at the FORK (harness), model auto = harness decides
-model:
+# Brain: stays CONSTANT on your primary model (e.g. claude-3-5-sonnet, gpt-4o)
+# Delegation & Subagents: pointed at the FORK harness (:20128)
+delegation:
   provider: custom
-  model: auto
   base_url: http://localhost:20128/v1
   api_key: "${OMNIROUTE_API_KEY}"
 ```

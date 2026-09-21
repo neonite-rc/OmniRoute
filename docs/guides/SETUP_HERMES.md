@@ -59,23 +59,31 @@ Go to **API Manager** and create a key. This is the single key Hermes
 uses — it reaches every provider you added. (Keys are the base project's
 own mechanism; the fork doesn't change them.)
 
-## 4. Point Hermes at the endpoint
+## 4. Point Hermes at the endpoint (Subagents & Delegation)
 
-Give Hermes (or any OpenAI-compatible agent) two values:
+> **Golden Architectural Rule**: The main Hermes agent model remains **CONSTANT** (e.g. Claude 3.5 Sonnet, GPT-4o) so you never lose conversational continuity. OmniRoute is reserved specifically for **subagents, delegation, and parallel worker swarms**.
+
+Give Hermes's `delegation` configuration two values:
 
 | Setting | Value |
 |---|---|
 | Base URL | `http://localhost:20128/v1` |
 | API key | the OmniRoute key from step 3 |
 
+In `~/.hermes/config.yaml`:
+```yaml
+delegation:
+  provider: Omnirouter
+  base_url: http://localhost:20128/v1
+  key_env: HERMES_CUSTOM_LOCALHOST_20128_API_KEY
+```
+
 (`/v1/*` and `/api/v1/*` are the same thing — the fork rewrites one to the
 other, so either works.)
 
-If Hermes supports an OpenAI-style client config, that's all it takes:
-the chat endpoint (`/v1/chat/completions`) behaves exactly like OpenAI's,
-with `model: "auto"` for automatic routing. The orchestration surface
-(objectives, sub-agents, spawn) lives under `/v1/orchestrate/*` — see the
-next step.
+Your main agent conversation remains stable on its primary model, while
+all subagents spawned via delegation, MCP `omni-swarm`, and orchestration
+endpoints route through OmniRoute across diverse providers.
 
 ## 5. Install the orchestration skill (one file)
 

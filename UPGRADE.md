@@ -196,6 +196,21 @@ docker run -d --name omniroute --restart unless-stopped \
   omniroute:parallel-execution
 ```
 
+## 5c. Option E — Autonomous Agent Upgrade & Hermes Subagent Setup
+
+If you use Hermes Agent and want Hermes to upgrade your base OmniRoute installation autonomously:
+1. Clone this repository or have Hermes read it.
+2. Hermes reads `AGENTS.md` and runs:
+   ```bash
+   ./bin/hermes-agent-integrate.sh --yes
+   ```
+3. What happens automatically:
+   - Base OmniRoute is upgraded in-place without losing keys or database state.
+   - **Main Agent Brain remains CONSTANT**: Hermes's default conversation model is never modified or pointed to OmniRoute.
+   - **Subagents Configured**: Hermes's `delegation:` slot is configured to route subagents through OmniRoute (`http://localhost:20128/v1`).
+   - **Superpowers Injected**: Persistent memory is created at `~/.hermes/memories/omniroute-superpowers.md` and `~/.hermes/SOUL.md` is updated.
+   - MCP server `omni-swarm` is installed and registered.
+
 ## 6. Selective application (single builds)
 
 Builds are cumulative — apply in order. To take only through B15, for
