@@ -269,38 +269,38 @@ else
   if [ "$DRY_RUN" = true ]; then
     log "Bashrc wrapper: would append"
   else
-    cat >> "${HOME}/.bashrc" << 'BASHRC'
+    cat >> "${HOME}/.bashrc" << BASHRC
 
 # ── OmniRoute auto-boot for Hermes ──
-OMNIROUTE_DIR="/var/home/ansh/OmniDEV/OmniRoute"
+OMNIROUTE_DIR="${SCRIPT_DIR}"
 OMNIROUTE_HEALTH_URL="http://localhost:20128/api/monitoring/health"
 hermes() {
   local _need_server=1 _a
-  for _a in "$@"; do
-    case "$_a" in -h|--help|-V|--version) _need_server=0; break ;; esac
+  for _a in "\$@"; do
+    case "\$_a" in -h|--help|-V|--version) _need_server=0; break ;; esac
   done
-  if [ "$_need_server" = "1" ]; then
-    case "${1:-}" in
+  if [ "\$_need_server" = "1" ]; then
+    case "\${1:-}" in
       config|model|moa|hooks|doctor|status|auth|login|logout|completion|
       skin|update|migrate|backup|logs|dashboard|pairing|prompt-size|
       version|worktree) _need_server=0 ;;
     esac
   fi
-  if [ "$_need_server" = "1" ]; then
-    if ! curl -sf --max-time 2 "$OMNIROUTE_HEALTH_URL" 2>/dev/null | grep -q '"healthy"'; then
-      if [ -d "$OMNIROUTE_DIR/node_modules" ]; then
+  if [ "\$_need_server" = "1" ]; then
+    if ! curl -sf --max-time 2 "\$OMNIROUTE_HEALTH_URL" 2>/dev/null | grep -q '"healthy"'; then
+      if [ -d "\$OMNIROUTE_DIR/node_modules" ]; then
         echo "[hermes] Starting OmniRoute ..." >&2
-        (cd "$OMNIROUTE_DIR" && setsid npm run dev >>"$HOME/.omniroute-dev.log" 2>&1 < /dev/null &)
-        for _i in $(seq 1 18); do
+        (cd "\$OMNIROUTE_DIR" && setsid npm run dev >>"\$HOME/.omniroute-dev.log" 2>&1 < /dev/null &)
+        for _i in \$(seq 1 18); do
           sleep 5
-          if curl -sf --max-time 2 "$OMNIROUTE_HEALTH_URL" 2>/dev/null | grep -q '"healthy"'; then
+          if curl -sf --max-time 2 "\$OMNIROUTE_HEALTH_URL" 2>/dev/null | grep -q '"healthy"'; then
             echo "[hermes] OmniRoute ready." >&2; break
           fi
         done
       fi
     fi
   fi
-  command hermes "$@"
+  command hermes "\$@"
 }
 BASHRC
     log "Bashrc wrapper: appended"

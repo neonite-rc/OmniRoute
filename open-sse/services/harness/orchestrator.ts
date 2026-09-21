@@ -1691,34 +1691,52 @@ async function runStream(jobId: string, deps: RunnerDeps, log: LogFn): Promise<v
   // calls the same model twice while alternatives remain ("best of A, best
   // of B…" across the WHOLE job, not per wave).
   const usedModels = new Set<string>();
+
+  // Blackboard serialization lock so concurrent completions don't race and overwrite summaries
+  let blackboardLock = Promise.resolve();
+  const withBlackboardLock = async (fn: () => Promise<void>): Promise<void> => {
+    let release: () => void = () => {};
+    const next = new Promise<void>((resolve) => { release = resolve; });
+    const wait = blackboardLock;
+    blackboardLock = next;
+    try {
+      await wait;
+      await fn();
+    } finally {
+      release();
+    }
+  };
+
   /** Per-completion swarm bookkeeping (the "analyze each finish as it lands" move). */
   const onCompletion = async (taskId: string, text: string | null): Promise<void> => {
     if (text === null) return;
-    const job = await Promise.resolve(store.getJob(jobId));
-    if (!job || job.mode !== "swarm") return;
-    const summary = parseSummary(text);
-    const merged = mergeIntoBlackboard(job.blackboard, [{ taskId, summary }]);
-    await Promise.resolve(store.updateBlackboard(jobId, merged));
-    log(taskId, "blackboard_append", truncateLog(summary));
-    // Bounded A2A: one question per completed worker, relayed immediately.
-    const directives = parseAskDirectives(taskId, text);
-    if (directives.length === 0) return;
-    const ask = directives[0];
-    const fresh = await Promise.resolve(store.getJob(jobId));
-    const target = fresh?.tasks.find((task) => task.id === ask.to);
-    if (!target || target.state !== "done") {
-      log(taskId, "mailbox_skipped", `@ask target "${ask.to}" has no completed output`);
-      return;
-    }
-    if (isMediaModality(taskModalityOf(target))) {
-      log(taskId, "mailbox_skipped", `@ask target "${ask.to}" is a media task (${taskModalityOf(target)}) and cannot answer`);
-      return;
-    }
-    const answer = await relayQuestion(jobId, ask, target, deps, log);
-    const updated = await Promise.resolve(store.getJob(jobId));
-    const withAnswer = appendMailboxAnswer(updated?.blackboard ?? null, { from: ask.from, to: ask.to, question: ask.question, answer });
-    await Promise.resolve(store.updateBlackboard(jobId, withAnswer));
-    log(taskId, "mailbox_relayed", `to ${ask.to}: ${truncateLog(answer)}`);
+    await withBlackboardLock(async () => {
+      const job = await Promise.resolve(store.getJob(jobId));
+      if (!job || job.mode !== "swarm") return;
+      const summary = parseSummary(text);
+      const merged = mergeIntoBlackboard(job.blackboard, [{ taskId, summary }]);
+      await Promise.resolve(store.updateBlackboard(jobId, merged));
+      log(taskId, "blackboard_append", truncateLog(summary));
+      // Bounded A2A: one question per completed worker, relayed immediately.
+      const directives = parseAskDirectives(taskId, text);
+      if (directives.length === 0) return;
+      const ask = directives[0];
+      const fresh = await Promise.resolve(store.getJob(jobId));
+      const target = fresh?.tasks.find((task) => task.id === ask.to);
+      if (!target || target.state !== "done") {
+        log(taskId, "mailbox_skipped", `@ask target "${ask.to}" has no completed output`);
+        return;
+      }
+      if (isMediaModality(taskModalityOf(target))) {
+        log(taskId, "mailbox_skipped", `@ask target "${ask.to}" is a media task (${taskModalityOf(target)}) and cannot answer`);
+        return;
+      }
+      const answer = await relayQuestion(jobId, ask, target, deps, log);
+      const updated = await Promise.resolve(store.getJob(jobId));
+      const withAnswer = appendMailboxAnswer(updated?.blackboard ?? null, { from: ask.from, to: ask.to, question: ask.question, answer });
+      await Promise.resolve(store.updateBlackboard(jobId, withAnswer));
+      log(taskId, "mailbox_relayed", `to ${ask.to}: ${truncateLog(answer)}`);
+    });
   };
 
   for (;;) {

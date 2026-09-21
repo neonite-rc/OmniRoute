@@ -49,19 +49,22 @@ export async function GET(
   );
 
   for (;;) {
-    const job = store.getJob(jobId);
-    if (!job) {
+    const terminalState = store.getJobTerminalState(jobId);
+    if (!terminalState) {
       return NextResponse.json({ ok: false, error: "unknown_job", job_id: jobId }, { status: 404 });
     }
-    const completedSince = job.tasks
-      .filter((task) => (task.state === "done" || task.state === "failed") && !baseline.has(task.id))
-      .map((task) => task.id);
-    const jobTerminal = job.status === "done" || job.status === "failed";
-    if (jobTerminal) {
-      return NextResponse.json({ ...jobToApi(job), completed_since: completedSince, drained: true }, { status: 200 });
-    }
-    if (completedSince.length > 0 || Date.now() >= deadlineMs) {
-      return NextResponse.json({ ...jobToApi(job), completed_since: completedSince, drained: false }, { status: 200 });
+    const completedSince = terminalState.terminalTaskIds.filter((id) => !baseline.has(id));
+    const jobTerminal = terminalState.status === "done" || terminalState.status === "failed";
+    const timedOut = Date.now() >= deadlineMs;
+    if (jobTerminal || completedSince.length > 0 || timedOut) {
+      const job = store.getJob(jobId);
+      if (!job) {
+        return NextResponse.json({ ok: false, error: "unknown_job", job_id: jobId }, { status: 404 });
+      }
+      return NextResponse.json(
+        { ...jobToApi(job), completed_since: completedSince, drained: jobTerminal },
+        { status: 200 }
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, TICK_MS));
   }

@@ -61,6 +61,20 @@ export async function POST(
 
   const idempotencyKey = request.headers.get("idempotency-key");
   if (idempotencyKey) {
+    const existingAppend = store.findAppendByIdempotencyKey(idempotencyKey);
+    if (existingAppend) {
+      const currentJob = store.getJob(existingAppend.jobId);
+      return NextResponse.json(
+        {
+          ok: true,
+          job_id: existingAppend.jobId,
+          status: currentJob?.status ?? "active",
+          appended: existingAppend.taskCount,
+          replayed: true,
+        },
+        { status: 200 }
+      );
+    }
     const existing = store.findByIdempotencyKey(idempotencyKey);
     if (existing) {
       return NextResponse.json({ ...jobToApi(existing), replayed: true }, { status: 200 });
@@ -87,6 +101,10 @@ export async function POST(
       { ok: false, error: "duplicate_id", details: ["a task id in the payload already exists on the job"] },
       { status: 409 }
     );
+  }
+
+  if (idempotencyKey) {
+    store.recordAppendIdempotency(idempotencyKey, jobId, rows.length);
   }
 
   // Inferred tags are auditable from the log, same as creation-time ones.

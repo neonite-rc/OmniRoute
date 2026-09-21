@@ -51,17 +51,12 @@ export async function GET(request: NextRequest) {
   const deadlineMs = Date.now() + timeoutSeconds * 1000;
 
   const readStates = (): { states: Record<string, string>; firstTerminal: string | null } => {
-    const states: Record<string, string> = {};
+    const states = store.getJobStatuses(jobIds);
     let firstTerminal: string | null = null;
     for (const id of jobIds) {
-      const job = store.getJob(id);
-      if (!job) {
-        states[id] = "unknown";
-      } else {
-        states[id] = job.status;
-        if (firstTerminal === null && (job.status === "done" || job.status === "failed")) {
-          firstTerminal = id;
-        }
+      const status = states[id];
+      if (firstTerminal === null && (status === "done" || status === "failed")) {
+        firstTerminal = id;
       }
     }
     return { states, firstTerminal };
