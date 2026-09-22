@@ -5,24 +5,28 @@
 
 ---
 
-## 1. Provider — OmniRoute as the model gateway
+## 1. Provider & Delegation — Subagent Federation (Main Model Constant)
 
 **File:** `~/.hermes/config.yaml`
 
 ```yaml
-# At top-level (line ~4):
+# Provider definition (catalog access without overriding main brain):
 providers:
   - name: Omnirouter
     base_url: http://localhost:20128/v1
     key_env: HERMES_CUSTOM_LOCALHOST_20128_API_KEY
-    model: auto/best-coding
-    models:
-      # (all OmniRoute catalog models appear via /v1/models)
+    models: {}
+
+# Reserved strictly for subagents and delegation:
+delegation:
+  provider: Omnirouter
+  base_url: http://localhost:20128/v1
+  key_env: HERMES_CUSTOM_LOCALHOST_20128_API_KEY
 ```
 
-**What it does:** Routes all Hermes inference through OmniRoute's router.
-OmniRoute selects the best model per request from Kiro, NIM, or any other
-connected provider — Hermes never hardcodes a model ID.
+**Golden Architectural Rule:**
+- **Main Agent Brain**: Your default conversational model in `config.yaml` remains **CONSTANT** (e.g. Claude 3.5 Sonnet, GPT-4o). It is never pointed to OmniRoute auto-routing for direct dialog, preserving context stability and persona continuity.
+- **Subagent Federation**: OmniRoute is configured as the `delegation` provider. All subagent spawning, parallel swarms, and specialist delegations route through OmniRoute across diverse connected providers (Kiro, NIM, Anthropic, OpenAI, DeepSeek, etc.).
 
 ---
 
@@ -192,11 +196,35 @@ are tried last. Unknown models get one trial.
 
 ---
 
+## 10. Persistent Memory — Superpowers for Hermes
+
+**Location:** `~/.hermes/memories/omniroute-superpowers.md`
+
+Automatically created by `additional-programming.sh` or `bin/hermes-agent-integrate.sh`.
+Indexes the fork's superpowers (4–8+ parallel models, multi-provider federation,
+`/v1/orchestrate/quick`, `/plan`, MCP `omni-swarm`, bias guard) directly into Hermes's
+memory retrieval so Hermes permanently recalls how to delegate and orchestrate subagents.
+
+---
+
+## 11. Autonomous Agent Upgrade & Integration
+
+AI agents (like Hermes) can upgrade an existing OmniRoute installation and configure
+subagent federation with a single command:
+
+```bash
+./bin/hermes-agent-integrate.sh --yes
+```
+
+See [AGENTS.md](AGENTS.md) for full autonomous agent instructions and decision rules.
+
+---
+
 ## Quick-start (copy-paste)
 
 ```bash
 # 1. Start OmniRoute (or let the wrapper do it)
-cd /var/home/ansh/OmniDEV/OmniRoute && npm run dev &
+npm run dev &
 
 # 2. Set the API key
 echo 'HERMES_CUSTOM_LOCALHOST_20128_API_KEY=sk-your-key' >> ~/.hermes/.env

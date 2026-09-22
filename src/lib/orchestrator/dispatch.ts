@@ -320,6 +320,7 @@ export function chatDispatchFor(request: Request, jobId?: string | null): TaskDi
       const json = (await response.json()) as {
         model?: string;
         choices?: Array<{ message?: { content?: unknown } }>;
+        usage?: Record<string, unknown>;
       };
       const rawText = json.choices?.[0]?.message?.content;
       const text = typeof rawText === "string" ? rawText : rawText == null ? "" : JSON.stringify(rawText);
@@ -328,6 +329,7 @@ export function chatDispatchFor(request: Request, jobId?: string | null): TaskDi
         text,
         model: response.headers.get("x-omniroute-model") ?? json.model ?? null,
         provider: response.headers.get("x-omniroute-provider"),
+        usage: parseUsage(json.usage),
       };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "dispatch failed" };

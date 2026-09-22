@@ -131,16 +131,22 @@ function collectRequestText(body: Body): { text: string; messageCount: number } 
  * JSON-walk keeps it protocol-agnostic and cheap.
  */
 function detectModalities(body: Body): string[] {
-  const serialized = JSON.stringify(body).slice(0, 200_000); // cap the walk
+  // Strip tools/functions definitions so JSON schema parameters like { image_url: { type: "string" } }
+  // never trigger phantom vision modality detection.
+  const { tools: _t, tool_choice: _tc, functions: _f, ...contentOnly } = body;
+  void _t;
+  void _tc;
+  void _f;
+  const serialized = JSON.stringify(contentOnly).slice(0, 200_000); // cap the walk
   const modalities = new Set<string>();
-  if (/"type"\s*:\s*"image(_url|_input)?"/.test(serialized) || /"image_url"/.test(serialized)) {
+  if (/"type"\s*:\s*"image(_url|_input)?"/.test(serialized) || /"image_url"\s*:/.test(serialized)) {
     modalities.add("vision");
   }
-  if (/"type"\s*:\s*"input_audio"/.test(serialized) || /"input_audio"/.test(serialized)) {
+  if (/"type"\s*:\s*"input_audio"/.test(serialized) || /"input_audio"\s*:/.test(serialized)) {
     modalities.add("audio");
   }
-  if (/"mimeType"\s*:\s*"image\//i.test(serialized)) modalities.add("vision");
-  if (/"mimeType"\s*:\s*"audio\//i.test(serialized)) modalities.add("audio");
+  if (/"mimeType"\s*:\s*"image\//i.test(serialized) || /"mime_type"\s*:\s*"image\//i.test(serialized)) modalities.add("vision");
+  if (/"mimeType"\s*:\s*"audio\//i.test(serialized) || /"mime_type"\s*:\s*"audio\//i.test(serialized)) modalities.add("audio");
   return [...modalities];
 }
 

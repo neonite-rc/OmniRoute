@@ -78,6 +78,13 @@ export function ensureOrchestrateTables(): void {
     );
     CREATE INDEX IF NOT EXISTS orchestrate_job_log_job
       ON orchestrate_job_log(job_id, id);
+
+    CREATE TABLE IF NOT EXISTS orchestrate_append_idempotency (
+      idempotency_key TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL,
+      task_count INTEGER NOT NULL,
+      created_at REAL NOT NULL
+    );
   `);
   // judge_rounds landed with B3.5; existing installs self-heal via ALTER.
   try {
@@ -298,11 +305,116 @@ export class SqliteJobsStore {
       `INSERT INTO orchestrate_job_log (timestamp, job_id, task_id, event, detail)
        VALUES (?, ?, ?, ?, ?)`
     );
-    for (const entry of job.log) {
-      insertLog.run(entry.timestamp, entry.jobId || job.jobId, entry.taskId, entry.event, entry.detail);
-    }
-    insertLog.run(job.createdAt, job.jobId, null, "job_created", `${job.tasks.length} tasks, mode ${job.mode}`);
+
+    const runCreate = typeof (db as any).transaction === "function"
+      ? (db as any).transaction(() => {
+          insertJob.run(
+            job.jobId,
+            job.goal,
+            job.mode,
+            JSON.stringify(job.policy),
+            job.blackboard ? JSON.stringify(job.blackboard) : null,
+            job.status,
+            idempotencyKey,
+            job.callerModel ?? null,
+            job.parentJobId ?? null,
+            job.createdAt,
+            job.deadlineAt
+          );
+          for (const task of job.tasks) {
+            insertTask.run(
+              job.jobId,
+              task.id,
+              task.tag,
+              task.modality ?? MODALITY_BY_TAG[task.tag],
+              task.prompt,
+              JSON.stringify(task.dependsOn)
+            );
+          }
+          for (const entry of job.log) {
+            insertLog.run(entry.timestamp, entry.jobId || job.jobId, entry.taskId, entry.event, entry.detail);
+          }
+          insertLog.run(job.createdAt, job.jobId, null, "job_created", `${job.tasks.length} tasks, mode ${job.mode}`);
+        })
+      : () => {
+          insertJob.run(
+            job.jobId,
+            job.goal,
+            job.mode,
+            JSON.stringify(job.policy),
+            job.blackboard ? JSON.stringify(job.blackboard) : null,
+            job.status,
+            idempotencyKey,
+            job.callerModel ?? null,
+            job.parentJobId ?? null,
+            job.createdAt,
+            job.deadlineAt
+          );
+          for (const task of job.tasks) {
+            insertTask.run(
+              job.jobId,
+              task.id,
+              task.tag,
+              task.modality ?? MODALITY_BY_TAG[task.tag],
+              task.prompt,
+              JSON.stringify(task.dependsOn)
+            );
+          }
+          for (const entry of job.log) {
+            insertLog.run(entry.timestamp, entry.jobId || job.jobId, entry.taskId, entry.event, entry.detail);
+          }
+          insertLog.run(job.createdAt, job.jobId, null, "job_created", `${job.tasks.length} tasks, mode ${job.mode}`);
+        };
+    runCreate();
     return this.getJob(job.jobId) as OrchestrateJob;
+  }
+
+  findAppendByIdempotencyKey(key: string): { jobId: string; taskCount: number } | null {
+    ensureOrchestrateTables();
+    const db = getDbInstance();
+    const row = db
+      .prepare(`SELECT job_id, task_count FROM orchestrate_append_idempotency WHERE idempotency_key = ?`)
+      .get(key) as { job_id: string; task_count: number } | undefined;
+    return row ? { jobId: row.job_id, taskCount: row.task_count } : null;
+  }
+
+  recordAppendIdempotency(key: string, jobId: string, taskCount: number): void {
+    ensureOrchestrateTables();
+    const db = getDbInstance();
+    db.prepare(
+      `INSERT OR REPLACE INTO orchestrate_append_idempotency (idempotency_key, job_id, task_count, created_at)
+       VALUES (?, ?, ?, ?)`
+    ).run(key, jobId, taskCount, Date.now());
+  }
+
+  getJobStatuses(jobIds: string[]): Record<string, string> {
+    if (jobIds.length === 0) return {};
+    ensureOrchestrateTables();
+    const db = getDbInstance();
+    const placeholders = jobIds.map(() => "?").join(",");
+    const rows = db
+      .prepare(`SELECT job_id, status FROM orchestrate_jobs WHERE job_id IN (${placeholders})`)
+      .all(...jobIds) as Array<{ job_id: string; status: string }>;
+    const out: Record<string, string> = {};
+    for (const id of jobIds) out[id] = "unknown";
+    for (const row of rows) out[row.job_id] = row.status;
+    return out;
+  }
+
+  getJobTerminalState(jobId: string): { status: string; terminalTaskIds: string[] } | null {
+    ensureOrchestrateTables();
+    const db = getDbInstance();
+    const jobRow = db.prepare(`SELECT status FROM orchestrate_jobs WHERE job_id = ?`).get(jobId) as
+      | { status: string }
+      | undefined;
+    if (!jobRow) return null;
+    const taskRows = db
+      .prepare(`SELECT task_id FROM orchestrate_tasks WHERE job_id = ? AND state IN ('done', 'failed')`)
+      .all(jobId) as Array<{ task_id: string }>;
+    return {
+      status: jobRow.status,
+      terminalTaskIds: taskRows.map((r) => r.task_id),
+    };
   }
 
   getJob(jobId: string): OrchestrateJob | null {

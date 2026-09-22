@@ -99,7 +99,15 @@ export function recordNim429(connectionId: string, retryAfterMs: number | null):
 export function nimWindowCount(connectionId: string): number {
   if (!connectionId) return 0;
   const now = Date.now();
-  return pruneWindow(now, requestWindows.get(connectionId) ?? []).length;
+  const raw = requestWindows.get(connectionId);
+  if (!raw) return 0;
+  const pruned = pruneWindow(now, raw);
+  if (pruned.length === 0) {
+    requestWindows.delete(connectionId);
+    return 0;
+  }
+  requestWindows.set(connectionId, pruned);
+  return pruned.length;
 }
 
 /** Observed RPM ceiling for this connection (null until a 429 teaches it). */

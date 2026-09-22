@@ -194,7 +194,7 @@ def _load_ledger() -> dict:
 
 def _save_ledger(ledger: dict) -> None:
     LEDGER.parent.mkdir(parents=True, exist_ok=True)
-    tmp = LEDGER.with_suffix(".tmp")
+    tmp = LEDGER.with_name(f"ledger_{os.getpid()}_{int(time.time() * 1000)}.tmp")
     tmp.write_text(json.dumps(ledger, indent=1))
     os.replace(tmp, LEDGER)
 

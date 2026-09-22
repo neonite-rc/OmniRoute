@@ -152,7 +152,9 @@ export function executionDecision(
 
 /** Capability requirements implied by a domain, for tool/agent matching. */
 export function toolCapabilitiesForDomain(domain: string | null): string[] {
-  if (domain === "search" || domain === "research") return ["browser", "web_research"];
+  if (domain === "search") return ["web_search"];
+  if (domain === "research") return ["web_research"];
+  if (domain === "browser") return ["browser"];
   return [];
 }
 

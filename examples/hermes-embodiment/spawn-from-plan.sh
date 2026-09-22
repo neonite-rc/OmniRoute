@@ -34,7 +34,18 @@ command -v hermes >/dev/null 2>&1 || { echo "hermes CLI required (Desktop ≥ v0
 # --report extra args are VAR=value pairs
 for kv in "$@"; do
   case "$kv" in
-    *=*) k="${kv%%=*}"; v="${kv#*=}"; printf -v "$k" '%s' "$v" ;;
+    *=*)
+      k="${kv%%=*}"
+      v="${kv#*=}"
+      case "$k" in
+        OMNIROUTE_URL|OMNIROUTE_KEY|sources_found|sources_verified|quality_score|latency_ms|success|model|tools)
+          printf -v "$k" '%s' "$v"
+          ;;
+        *)
+          echo "WARNING: ignoring unknown report variable: $k" >&2
+          ;;
+      esac
+      ;;
   esac
 done
 

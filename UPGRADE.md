@@ -136,6 +136,81 @@ transport patch (PR #4288) MUST survive; `docs/openapi.yaml` insertions go
 before `components:`; both openapi copies are checked by §7.3 (docs/ is
 canonical). After resolving: full §7 gates.
 
+## 5b. Option D — In-place upgrade from upstream/official OmniRoute (without uninstalling)
+
+If you already have official OmniRoute installed (via Git clone, global npm, or Docker), you can upgrade to this fork **without uninstalling or losing data**:
+- **SQLite Database preserved:** `$DATA_DIR/storage.sqlite` (or `~/.omniroute/storage.sqlite`) remains completely untouched.
+- **Additive Migrations:** All schema additions (`orchestrate_jobs`, `orchestrate_tasks`, etc.) are executed via idempotent `ALTER TABLE / CREATE TABLE IF NOT EXISTS` at boot.
+- **Config preserved:** Your `.env` provider keys, custom endpoints, and configurations carry over.
+
+### Automatic One-Step Upgrade
+Run the in-place upgrade script:
+```bash
+# Preview what will happen:
+./bin/upgrade-from-base.sh --dry-run
+
+# Run upgrade:
+./bin/upgrade-from-base.sh
+```
+
+### Manual In-Place Upgrade Steps
+
+#### D1. For Source / Git Checkout installations:
+```bash
+cd <your-existing-omniroute-dir>
+
+# 1. Snapshot database before upgrade (precaution)
+./bin/snapshot-data.sh --label pre_upgrade 2>/dev/null || cp -a ~/.omniroute/storage.sqlite ~/.omniroute/storage.sqlite.bak
+
+# 2. Add fork remote and fetch the parallel-execution branch
+git remote add fork https://github.com/neonite-rc/OmniRoute.git
+git fetch fork fork/parallel-execution
+
+# 3. Checkout the fork branch
+git checkout -b fork/parallel-execution fork/parallel-execution
+
+# 4. Install dependencies (lockfile or legacy peer deps)
+npm install --legacy-peer-deps
+
+# 5. Build and start
+npm run build && npm run start   # or: npm run dev
+```
+
+#### D2. For Global npm installations (`npm install -g omniroute`):
+```bash
+# Upgrade the global CLI in-place from the fork git repository:
+npm install -g "git+https://github.com/neonite-rc/OmniRoute.git#fork/parallel-execution"
+
+# Existing ~/.omniroute database and keys are used automatically on launch:
+omniroute
+```
+
+#### D3. For Docker installations:
+```bash
+# Keep your existing data volume mounted (-v ~/.omniroute:/app/data):
+docker stop omniroute || true
+docker build -t omniroute:parallel-execution https://github.com/neonite-rc/OmniRoute.git#fork/parallel-execution
+docker run -d --name omniroute --restart unless-stopped \
+  -v ~/.omniroute:/app/data \
+  -p 20128:20128 \
+  omniroute:parallel-execution
+```
+
+## 5c. Option E — Autonomous Agent Upgrade & Hermes Subagent Setup
+
+If you use Hermes Agent and want Hermes to upgrade your base OmniRoute installation autonomously:
+1. Clone this repository or have Hermes read it.
+2. Hermes reads `AGENTS.md` and runs:
+   ```bash
+   ./bin/hermes-agent-integrate.sh --yes
+   ```
+3. What happens automatically:
+   - Base OmniRoute is upgraded in-place without losing keys or database state.
+   - **Main Agent Brain remains CONSTANT**: Hermes's default conversation model is never modified or pointed to OmniRoute.
+   - **Subagents Configured**: Hermes's `delegation:` slot is configured to route subagents through OmniRoute (`http://localhost:20128/v1`).
+   - **Superpowers Injected**: Persistent memory is created at `~/.hermes/memories/omniroute-superpowers.md` and `~/.hermes/SOUL.md` is updated.
+   - MCP server `omni-swarm` is installed and registered.
+
 ## 6. Selective application (single builds)
 
 Builds are cumulative — apply in order. To take only through B15, for

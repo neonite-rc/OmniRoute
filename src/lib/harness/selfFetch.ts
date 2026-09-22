@@ -38,6 +38,20 @@ const STRIP_RESPONSE_HEADERS = new Set([
   "content-length",
 ]);
 
+function resolveInternalOrigin(incoming: Request): string {
+  if (process.env.INTERNAL_BASE_URL) return process.env.INTERNAL_BASE_URL.replace(/\/+$/, "");
+  try {
+    const parsed = new URL(incoming.url);
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1") {
+      return parsed.origin;
+    }
+  } catch {
+    // ignore
+  }
+  const port = process.env.PORT || process.env.OMNIROUTE_PORT || "20128";
+  return `http://127.0.0.1:${port}`;
+}
+
 async function selfFetchJson(
   path: string,
   incoming: Request,
@@ -45,7 +59,7 @@ async function selfFetchJson(
   extraHeaders: Record<string, string> | undefined,
   timeoutMs: number
 ): Promise<Response> {
-  const origin = new URL(incoming.url).origin;
+  const origin = resolveInternalOrigin(incoming);
   const headers = new Headers({ "Content-Type": "application/json" });
   for (const name of FORWARDED_AUTH_HEADERS) {
     const value = incoming.headers.get(name);
@@ -110,7 +124,7 @@ export async function selfFetchList(
   incoming: Request,
   timeoutMs = 2_500
 ): Promise<Response> {
-  const origin = new URL(incoming.url).origin;
+  const origin = resolveInternalOrigin(incoming);
   const headers = new Headers();
   for (const name of FORWARDED_AUTH_HEADERS) {
     const value = incoming.headers.get(name);
