@@ -68,10 +68,25 @@ fi
 # ── 3. Configure config.yaml (Main brain constant, delegation to OmniRoute) ───
 if [ "$DRY_RUN" = false ] && command -v python3 >/dev/null 2>&1; then
   python3 << 'PYEOF'
-import yaml, os
+import os, sys
 
 hermes_dir = os.path.expanduser("~/.hermes")
 config_path = os.path.join(hermes_dir, "config.yaml")
+
+try:
+    import yaml
+except ImportError:
+    # If pyyaml isn't installed, append minimal YAML configuration
+    try:
+        import subprocess
+        subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "pyyaml"], check=True)
+        import yaml
+    except Exception:
+        # Fallback: simple text appending
+        with open(config_path, "a") as f:
+            f.write("\n# OmniRoute Subagent Delegation\ndelegation:\n  provider: Omnirouter\n  base_url: http://localhost:20128/v1\n  key_env: HERMES_CUSTOM_LOCALHOST_20128_API_KEY\n")
+        print("[omni-mod] config.yaml appended with delegation block (fallback)")
+        sys.exit(0)
 
 cfg = {}
 if os.path.isfile(config_path):

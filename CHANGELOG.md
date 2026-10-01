@@ -90,9 +90,24 @@
 - **feat(cli):** run `omniroute serve --tray` as a detached desktop process after server and tray readiness, with graphical login auto-start support.
 - **feat(routing):** add client-, provider-, and model-neutral exclusive managed session connection leases with API-key-bound generation fencing, durable SQLite ownership, explicit allowlist policy, and bounded 429 capacity retry semantics.
 
-## [3.8.51] — TBD
+## [3.8.51] — 2026-09-29
 
-_Living section — cycle opened at the v3.8.50 freeze (parallel-cycle model). Bullets are aggregated from `changelog.d/` fragments at each `/generate-release` phase._
+_Reconciled with upstream v3.8.51 release plus parallel execution harness and lite agent integration suite._
+
+### 🚀 Parallel Execution & Lightweight Mod Features (Fork)
+- **feat(parallel):** 4 to 8+ concurrent model requests simultaneously without 503 errors (Dynamic Admission Profile).
+- **feat(delegation):** `/v1/orchestrate/*` orchestration suite (quick sync execution, parallel DAG plans, fast poll wait-first).
+- **feat(mcp):** `omni-swarm` MCP server for multi-model subagent swarms across diverse providers (Kiro, NVIDIA NIM, OpenAI, Anthropic, Gemini, DeepSeek).
+- **feat(lite):** Ultra-fast zero-download standalone agent mod installer (`bin/install-hermes-mod.sh`).
+- **feat(lite):** In-place engine upgrade tool with shallow git fetch and devDependency omission (`bin/upgrade-from-base.sh --lite`).
+- **feat(sync):** Native sparse-checkout workspace load balancer (`bin/omni-sync.sh`) solving snapshot storage quotas.
+- **feat(runtime):** Seamless fallback to live dev runner in `omniroute serve` and `npm start` when standalone UI build is omitted.
+
+### ✨ Upstream v3.8.51 Features & Fixes
+- **fix(sse):** hoist leading text system messages on Claude mid-conversation passthrough (`open-sse/handlers/chatCore/claudeSystemRole.ts`).
+- **fix(memory):** dynamic runtime `@huggingface/transformers` import with `webpackIgnore` for resilient startup when optional ONNX packages are omitted.
+- **security(deps):** bump `next` to 16.3.5, `undici` to 8.11.2, `better-sqlite3` to 13.0.3, `onnxruntime-node` to 1.30.0, and security overrides (`hono`, `ip-address`, `adm-zip`).
+- **fix(docker):** bump Bun image to 1.4.0 with Turbopack and memory guards.
 
 ### ✨ New Features
 

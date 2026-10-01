@@ -179,6 +179,19 @@ export async function runServe(opts = {}) {
   const serverJs = existsSync(serverWsJs) ? serverWsJs : join(APP_DIR, "server.js");
 
   if (!existsSync(serverJs)) {
+    const devRunner = join(ROOT, "scripts", "dev", "run-next.mjs");
+    if (existsSync(devRunner)) {
+      console.log(`\x1b[36mℹ Standalone build (dist/server.js) not found — running smooth lite engine via scripts/dev/run-next.mjs...\x1b[0m\n`);
+      const child = spawn(process.execPath, [devRunner, "dev"], {
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          PORT: String(port),
+        },
+      });
+      child.on("exit", (code) => process.exit(code || 0));
+      return;
+    }
     console.error("\x1b[31m✖ Server not found at:\x1b[0m", serverJs);
     console.error("  The package may not have been built correctly.");
     console.error("");

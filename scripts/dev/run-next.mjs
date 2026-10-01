@@ -46,7 +46,11 @@ if (fs.existsSync(rootAppDir) && fs.statSync(rootAppDir).isDirectory()) {
   process.exit(1);
 }
 
-const mode = process.argv[2] === "start" ? "start" : "dev";
+let mode = process.argv[2] === "start" ? "start" : "dev";
+if (mode === "start" && !fs.existsSync(path.join(process.cwd(), ".next", "BUILD_ID"))) {
+  console.log("\x1b[33mℹ Production build (.next) not found — auto-falling back to dev mode for smooth lite execution.\x1b[0m");
+  mode = "dev";
+}
 const dev = mode === "dev";
 
 // Self-heal a stale better-sqlite3 native binary after a Node version switch
