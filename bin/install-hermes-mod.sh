@@ -214,11 +214,25 @@ log "MCP server omni-swarm installed (with Jev System-1 decide support)"
 SKILL_DIR="${HERMES_DIR}/skills/omni-swarm"
 mkdir -p "$SKILL_DIR"
 cat > "${SKILL_DIR}/SKILL.md" << 'MDEOF'
-# omni-swarm — dynamic specialist swarm & Jev decision engine
-Run subtasks simultaneously across diverse providers via OmniRoute (4-8+ parallel models).
-- Resolve dilemmas instantly with `omni_decide(task)` or Jev decision flow.
-- Spawns independent subagents via `hermes chat --oneshot -m <model> -q '<prompt>'`
-- Collects and synthesizes results under the constant main agent.
+---
+name: omni-swarm
+description: Dynamic specialist swarm and Jev System-1 decision routing over OmniRoute. Use to eliminate agent hesitation, route specialist subtasks, and execute parallel multi-model swarms across diverse providers (4 to 8+ models).
+---
+
+# omni-swarm — Dynamic Specialist Swarm & Jev Decision Engine
+
+Harness OmniRoute as your subagent federation mesh. Execute subtasks in parallel across diverse model providers (Kiro, NVIDIA NIM, OpenAI, Anthropic, Gemini, DeepSeek) while **keeping your main model constant**.
+
+## 1. Zero-Dilemma Jev Decision Matrix
+- **Level 0 (SELF)**: Conversational chat, short query, direct answers → Answer directly with constant weights.
+- **Level 1 (DELEGATE)**: Single focused specialist task (Vision, math, deep code) → Call `POST /v1/orchestrate/quick` (tag: code|vision|reasoning).
+- **Level 2 (SWARM)**: Complex, multi-file tasks, writing code + parallel test suites, or MoA peer review → Call tool `omni-swarm(goal, subtasks)`.
+- **In Any Doubt?**: Call `omni_decide(task="...")` (or `POST /v1/orchestrate/decide`). It returns the exact verdict in 15ms!
+
+## 2. Tools
+- `omni_decide(task)`: Resolves dilemma in < 20ms returning `{"action": "SELF"|"DELEGATE"|"SWARM", "recommended_model": string, "tag": string}`.
+- `swarm(goal, subtasks)`: Runs parallel specialist headless workers across diverse models.
+  Subtask shape: `{"id": "t1", "prompt": "...", "capability": "code|reasoning|vision|chat", "depends_on": []}`.
 MDEOF
 log "Skill omni-swarm installed"
 

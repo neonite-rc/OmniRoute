@@ -1,102 +1,157 @@
-# omni-swarm — dynamic specialist swarm over OmniRoute
+---
+name: omni-swarm
+description: Dynamic specialist swarm and Jev System-1 decision routing over OmniRoute. Use to eliminate agent hesitation, route specialist subtasks, and execute parallel multi-model swarms across diverse providers (4 to 8+ models).
+---
 
-Run subtasks as a team: independent ones simultaneously, dependent ones in
-sequential waves, workers picked per-subtask from live OmniRoute data
-(capability match + local workload ledger). Synthesize at the end.
+# omni-swarm — Dynamic Specialist Swarm & Jev Decision Engine
 
-## 0. Bounds (non-negotiable)
+Harness OmniRoute as your subagent federation mesh. Execute subtasks in parallel across diverse model providers (Kiro, NVIDIA NIM, OpenAI, Anthropic, Gemini, DeepSeek) while **keeping your main model constant**.
 
-- Max **8 parallel workers** (swarm.ts `maxConcurrency`; fork increases from 4 to 8 for wider swarms on fat hosts). More splits must become sequential waves.
-- One MoE-panel invocation per task max (`moe` profile / `moa:omniroute-moe`).
-- Never re-fire a slot that just failed with rate-limit/quota/dead-model.
-  Fall back to `omniroute-duo` (2 proven refs) or a single best model instead.
-- Trivial single-step tasks: do NOT swarm. L0 self-execution stays default.
-- Cross-task diversity enforced: different tasks → different models from catalog when candidates allow (tag index `distinctModels: true, diverseProviders: true`).
+---
 
-## 1. Decompose
+## 1. Zero-Dilemma Jev Decision Matrix (When & How to Use)
 
-Split the goal into subtasks with explicit deps:
-`A, B independent → wave 1 together; C needs A+B → wave 2`.
-Sequential dependencies MUST be waves, never parallel.
+Never hesitate or waste reasoning tokens debating how to execute. Follow this deterministic 3-level rule:
 
-## 2. List capable agents (live)
-
-```bash
-curl -s --max-time 20 http://localhost:20128/v1/models \
-  -H "Authorization: Bearer $HERMES_CUSTOM_LOCALHOST_20128_API_KEY" \
-| python3 -c "import json,sys; [print(m['id']) for m in json.load(sys.stdin).get('data',[])]"
+```
+                            [Task Received]
+                                   │
+                      ┌────────────┴────────────┐
+             Simple chat /                 Specialized or
+             short answer?                 complex task?
+                   │                             │
+                   ▼                             ▼
+            [LEVEL 0: SELF]             Needs multi-model /
+          Answer immediately             swarm / specialist?
+         with constant weights                   │
+          (0 net, 0 latency)                     ├────────────────────────┐
+                                                 ▼                        ▼
+                                         Single capability?       Multi-step / swarm?
+                                         (Vision, Code, Math)    (2+ files, tests, MoA)
+                                                 │                        │
+                                                 ▼                        ▼
+                                        [LEVEL 1: DELEGATE]       [LEVEL 2: SWARM]
+                                        /v1/orchestrate/quick     omni-swarm tool
+                                        (tag: code|vision)        or /v1/orchestrate/plan
 ```
 
-If OmniRoute is unreachable, stop: do not guess model IDs, do the task yourself.
+### Level 0: Self-Execution (Default)
+- **When**: Conversational replies, short explanations, 1-line edits, general knowledge, greetings.
+- **Action**: Answer directly with your own weights. Do NOT call OmniRoute or spawn subagents.
 
-## 3. Rank by capability + past workload
+### Level 1: Specialist Delegation
+- **When**: A single focused task needing a specialized capability (e.g. Vision/OCR sensing, deep math proofs, heavy algorithmic code).
+- **Action**: Call `POST /v1/orchestrate/quick` with the capability tag:
+  ```bash
+  curl -s http://localhost:20128/v1/orchestrate/quick \
+    -H "Authorization: Bearer $HERMES_CUSTOM_LOCALHOST_20128_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "tag": "code",
+      "prompt": "Optimize this SQLite B-tree query for high concurrency"
+    }'
+  ```
+  *(Supported tags: `code`, `vision`, `research`, `reasoning`, `image_gen`).*
 
-Read the ledger `~/.hermes/omni-swarm/ledger.json`
-(`{model: {ok, fail, ema_ms, last}}`; missing file = no history, proceed):
+### Level 2: Parallel Multi-Model Swarm
+- **When**: Complex tasks with ≥2 independent deliverables:
+  - Feature implementation + Unit test suites
+  - Multi-file refactoring
+  - Competitive code reviews (2 models reviewing diff simultaneously)
+  - MoA (Mixture of Agents) multi-perspective evaluation
+- **Action**: Call the `omni-swarm` MCP tool or `POST /v1/orchestrate/plan`.
 
-- Capability match by model-ID signals (first filter):
-  code: `coder`, `claude`, `deepseek`, `qwen`, `kimi`, `nemotron`, `codestral`
-  reasoning: `reasoning`, `super`, `opus`, `qwq`, `r1`, `think`
-  chat/fast: `haiku`, `flash`, `lite`, `nano`, `gemma`, `mini`
-  vision: `vision`, `vl`, `multimodal` (plus `claude`/`gemini` families)
-  image-gen: `flux`, `stability-ai`, `segmind`, `lmarena` (image-generation providers)
-- Prefer ledger `ok/(ok+fail)` high and `ema_ms` low; skip models failing
-  recently (quota-dead). Skip `-low/-medium/-high` effort-suffixed Kiro IDs
-  (rejected by Kiro's live catalog) and image/search/grounding IDs (not chat).
-- Spread workers across providers (never stack all 8 on one account).
-- Provider diversity is enforced at the **provider token** level, not model-ID level:
-  - Hub prefixes (`nvidia`, `hf`, `huggingface`, `together`, `fireworks`, `azure`, `bedrock`) use two path segments: `nvidia/moonshotai` and `nvidia/deepseek-ai` are **distinct providers** — picking one blocks the other in the same swarm.
-  - All other prefixes use only the first segment: `kiro`, `lma`, `kr`, `zc`, etc. So `kiro/claude-haiku-4.5` and `kr/claude-haiku-4.5` are **different providers** even though both proxy Anthropic upstream — they are allowed to coexist.
-  - "Provider" means the OmniRoute account/gateway, not the upstream model vendor.
-- Dynamic model spawning: models resolved per-task from live OmniRoute catalog
-  via `POST /v1/router/candidates` with capability filter (chat/reasoning/vision/image-gen).
-  Tag specs (`fromTags`) re-resolve on every dispatch against the model tag index,
-  ensuring cross-task diversity.
-- Subtasks specify `capability: "vision"` or `fromTags: { category: "image-gen" }`
-  for image generation; other capabilities use `chat`, `coder`, or `reasoning`.
-
-## 4. Execute
-
-Independent subtasks → one headless call each, launched together:
-
-```bash
-hermes chat --oneshot -m <model-id> -q "<self-contained subtask prompt>" &
-# ... launch all wave members, then:
-wait
+### In Any Doubt? (Jev System-1 Decision)
+If you are uncertain which level fits, call the **`omni_decide`** tool (or `POST /v1/orchestrate/decide`). In **< 20ms**, it returns the exact calibrated verdict:
+```json
+{
+  "action": "SWARM",
+  "should_use_omniroute": true,
+  "confidence": 0.94,
+  "tag": "code",
+  "recommended_model": "kr/qwen3-coder-next",
+  "reason": "Decomposable multi-step task with parallel deliverables"
+}
 ```
 
-Dependent wave → run only after its deps return, embedding their outputs
-in the next prompt (`Context from <dep>: ...`).
+---
 
-Durable/multi-hour DAGs → `hermes kanban swarm --worker default:"<t1>" \
-  --worker default:"<t2>" --verifier default --synthesizer default "<goal>"`
-(use `--synthesizer moe` only for the final hard synthesis).
+## 2. Tool Reference
 
-## 5. Record outcomes (past workload for next time)
+### Tool A: `omni_decide(task)`
+Fast Jev-style System-1 decision to resolve agent routing dilemma.
+- **Input**: `task` (string) — The prompt or subtask to evaluate.
+- **Returns**: `{"action": "SELF"|"DELEGATE"|"SWARM", "should_use_omniroute": bool, "confidence": float, "recommended_model": string, "reason": string}`.
 
-After every swarm, append results to the ledger (stdlib only):
+### Tool B: `swarm(goal, subtasks)`
+Runs headless specialist workers across diverse models in parallel waves.
+- **Input**:
+  - `goal` (string) — High-level objective.
+  - `subtasks` (list of dicts):
+    ```json
+    [
+      {
+        "id": "backend",
+        "prompt": "Write the fast Hono API handler for user sessions.",
+        "capability": "code",
+        "depends_on": []
+      },
+      {
+        "id": "tests",
+        "prompt": "Write unit tests for the session handler verifying token expiry.",
+        "capability": "code",
+        "depends_on": []
+      },
+      {
+        "id": "review",
+        "prompt": "Review the API handler and tests for security vulnerabilities.",
+        "capability": "reasoning",
+        "depends_on": ["backend", "tests"]
+      }
+    ]
+    ```
+- **Returns**: Per-subtask output text, assigned models, latency, and success flags.
+- **Automatic Orchestration**:
+  - Independent subtasks (`depends_on: []`) run simultaneously (up to 8 parallel).
+  - Dependent subtasks wait for their prerequisites and automatically receive their output.
 
-```bash
-python3 <<'EOF'
-import json, time, os
-p = os.path.expanduser("~/.hermes/omni-swarm/ledger.json")
-try: ledger = json.load(open(p))
-except Exception: ledger = {}
-# results: list of {"model": m, "ok": bool, "ms": int}
-for r in RESULTS:
-    e = ledger.setdefault(r["model"], {"ok": 0, "fail": 0, "ema_ms": 5000})
-    e["ok" if r["ok"] else "fail"] += 1
-    e["ema_ms"] = round(0.7 * e["ema_ms"] + 0.3 * r["ms"])
-    e["last"] = int(time.time())
-os.makedirs(os.path.dirname(p), exist_ok=True)
-json.dump(ledger, open(p, "w"), indent=1)
-EOF
+---
+
+## 3. Proven Swarm Patterns
+
+### Pattern 1: Competitive Code Review
+Launch two distinct provider models to review the same patch simultaneously:
+```json
+{
+  "goal": "Review security of cryptographic session rotation",
+  "subtasks": [
+    {
+      "id": "reviewer_a",
+      "prompt": "Review this git diff for timing attacks and replay flaws: <DIFF>",
+      "capability": "reasoning",
+      "depends_on": []
+    },
+    {
+      "id": "reviewer_b",
+      "prompt": "Review this git diff for memory leaks and resource exhaustion: <DIFF>",
+      "capability": "code",
+      "depends_on": []
+    }
+  ]
+}
 ```
 
-Replace RESULTS with the actual per-worker outcomes before running.
+### Pattern 2: Parallel TDD (Test-Driven Development)
+Split implementation and test generation across independent models:
+- **Subtask 1 (`impl`)**: Writes clean TypeScript implementation.
+- **Subtask 2 (`tests`)**: Writes comprehensive test fixtures and edge cases.
+- **Subtask 3 (`verify`)**: Depends on `impl` and `tests`; runs the test suite and verifies assertions.
 
-## 6. Synthesize
+---
 
-Judge each part (correct? complete? right format?). Retry a below-bar part
-once with a sharper prompt (different model if it failed), max 2 retries,
-then synthesize the final answer and attribute delegated work.
+## 4. Synthesis & Ground Rules
+
+1. **Main Brain Constancy**: You (the orchestrator) remain on your constant model. You hold the user context, plan the decomposition, and synthesize the final answer.
+2. **Review Worker Output**: Subagents are headless specialists. Inspect their results for completeness before presenting them to the user.
+3. **No Refire Loops**: If a worker fails due to rate limits or invalid arguments, do not loop infinitely. Either retry with an alternate model or execute the fallback yourself.
+4. **Attribute Work**: When synthesizing the final response, briefly mention the specialist contributions (e.g. *"Verified by Qwen Coder and Claude Sonnet in parallel"*).
