@@ -34,13 +34,25 @@ Compared to upstream/base OmniRoute:
 
 If you have been directed by the user to upgrade and integrate:
 
+### Option A: Ultra-Lite Mod Installer (Instant — < 1 second, 0 MB git download)
+If OmniRoute is already running on port 20128 (or you only want to install the Hermes agent mod):
 ```bash
-./bin/hermes-agent-integrate.sh --yes
+./bin/install-hermes-mod.sh
+# or remotely without cloning:
+curl -sSL https://raw.githubusercontent.com/neonite-rc/OmniRoute/fork/parallel-execution/bin/install-hermes-mod.sh | bash
 ```
 
-This single command autonomously:
-1. **Detects & Upgrades Base OmniRoute In-Place**:
-   - If an existing base OmniRoute installation exists (git clone, npm global, or Docker), it creates a timestamped database backup and upgrades it in place without data loss or uninstall.
+### Option B: Full Engine In-Place Upgrade + Hermes Setup (Lite Mode)
+To upgrade an existing base OmniRoute installation while avoiding heavy build delays:
+```bash
+./bin/hermes-agent-integrate.sh --yes --lite
+```
+
+This autonomously:
+1. **Detects & Upgrades Base OmniRoute In-Place (Lite Profile)**:
+   - Uses shallow git fetch (`--depth 1`, saving 750 MB+ download).
+   - Installs production-only dependencies (`--omit=dev`, saving 300 MB+).
+   - Skips heavy Next.js client UI builds; daemon/API is ready immediately.
 2. **Configures Subagent Delegation in Hermes**:
    - Adds the `Omnirouter` provider and sets `delegation:` in `~/.hermes/config.yaml` to point to `http://localhost:20128/v1`.
    - **Guards your main model**: Ensures your default model in `config.yaml` is NOT overridden.

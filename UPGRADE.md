@@ -146,11 +146,14 @@ If you already have official OmniRoute installed (via Git clone, global npm, or 
 ### Automatic One-Step Upgrade
 Run the in-place upgrade script:
 ```bash
+# Fast mode for AI agents (shallow git fetch, prod deps only, skips heavy UI build):
+./bin/upgrade-from-base.sh --lite --yes
+
+# Full standard upgrade (includes Next.js client build):
+./bin/upgrade-from-base.sh --yes
+
 # Preview what will happen:
 ./bin/upgrade-from-base.sh --dry-run
-
-# Run upgrade:
-./bin/upgrade-from-base.sh
 ```
 
 ### Manual In-Place Upgrade Steps

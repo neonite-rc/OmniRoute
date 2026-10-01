@@ -12,8 +12,15 @@
 #   2. Global npm installations (`npm install -g omniroute`)
 #   3. Docker installations (preserves volume mounts)
 #
+# Performance & Lite Modes:
+#   --lite        Fast installation mode for AI agents:
+#                 - Shallow git fetch (--depth 1, saves ~750MB bandwidth)
+#                 - Production dependencies only (--omit=dev, cuts 300MB+ node_modules)
+#                 - Skips heavy client UI build (dev/api daemon ready immediately)
+#   --skip-build  Skips `npm run build`
+#
 # Usage:
-#   bin/upgrade-from-base.sh [--dry-run] [--yes] [--data-dir <path>]
+#   bin/upgrade-from-base.sh [--dry-run] [--yes] [--lite] [--data-dir <path>]
 #
 set -euo pipefail
 SCRIPT_NAME="upgrade-from-base"
@@ -37,6 +44,8 @@ FORK_REPO="${FORK_REPO:-$DEFAULT_FORK_REPO}"
 FORK_BRANCH="${FORK_BRANCH:-$DEFAULT_FORK_BRANCH}"
 DRY_RUN=0
 ASSUME_YES=0
+LITE_MODE=0
+SKIP_BUILD=0
 
 usage() {
   cat <<EOF
@@ -46,6 +55,11 @@ Upgrades an official/upstream OmniRoute installation to the parallel-execution f
 in place without uninstalling or losing data.
 
 Options:
+  --lite               Lightweight & fast mode for AI agents:
+                       - Shallow git fetch (--depth 1, saves 750MB+ download)
+                       - Production dependencies only (--omit=dev, saves 300MB+)
+                       - Skips heavy client UI build (runs in seconds)
+  --skip-build         Skip Next.js production build step
   --dry-run            Preview all upgrade actions without modifying anything
   --yes                Do not prompt for confirmation (unattended mode)
   --data-dir <path>    Override data directory (default: ~/.omniroute)
@@ -62,6 +76,8 @@ EOF
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --lite) LITE_MODE=1; SKIP_BUILD=1; shift ;;
+    --skip-build) SKIP_BUILD=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --yes) ASSUME_YES=1; shift ;;
     --data-dir) ops_set_data_dir "${2:?--data-dir needs a value}"; shift 2 ;;
@@ -75,6 +91,7 @@ done
 ops_log "================================================================="
 ops_log "OmniRoute Fork In-Place Upgrade Tool"
 ops_log "Target: $FORK_REPO @ $FORK_BRANCH"
+[ "$LITE_MODE" -eq 1 ] && ops_log "Profile: LITE (shallow fetch, prod deps only, skip UI build)"
 ops_log "================================================================="
 
 # ── 1. Detect environment and data directory ─────────────────────────────────
@@ -126,9 +143,10 @@ if [ "$IS_GIT_REPO" -eq 1 ]; then
   if [ "$DRY_RUN" -eq 1 ]; then
     ops_log "[dry-run] In $REPO_DIR:"
     ops_log "[dry-run]   - Add git remote 'fork' ($FORK_REPO)"
-    ops_log "[dry-run]   - Fetch branch '$FORK_BRANCH'"
+    ops_log "[dry-run]   - Fetch branch '$FORK_BRANCH' (shallow: $([ "$LITE_MODE" -eq 1 ] && echo 'yes' || echo 'no'))"
     ops_log "[dry-run]   - Switch to '$FORK_BRANCH'"
-    ops_log "[dry-run]   - Run npm install / npm ci"
+    ops_log "[dry-run]   - Run npm install (omit-dev: $([ "$LITE_MODE" -eq 1 ] && echo 'yes' || echo 'no'))"
+    ops_log "[dry-run]   - Skip UI build: $([ "$SKIP_BUILD" -eq 1 ] && echo 'yes' || echo 'no')"
     ops_log "[dry-run]   - Preserve .env and existing database"
     ops_log "[dry-run] Dry run complete. No files were modified."
     exit 0
@@ -148,8 +166,13 @@ if [ "$IS_GIT_REPO" -eq 1 ]; then
   else
     git remote add fork "$FORK_REPO"
   fi
+
   ops_log "Fetching $FORK_BRANCH from $FORK_REPO..."
-  git fetch fork "$FORK_BRANCH"
+  if [ "$LITE_MODE" -eq 1 ]; then
+    git fetch --depth 1 fork "$FORK_BRANCH"
+  else
+    git fetch fork "$FORK_BRANCH"
+  fi
 
   # Stash any local uncommitted work safely
   if ! git diff-index --quiet HEAD -- 2>/dev/null; then
@@ -160,7 +183,7 @@ if [ "$IS_GIT_REPO" -eq 1 ]; then
   # Checkout or fast-forward
   if git rev-parse --verify "$FORK_BRANCH" >/dev/null 2>&1; then
     git checkout "$FORK_BRANCH"
-    git merge --ff-only "fork/$FORK_BRANCH" || git reset --hard "fork/$FORK_BRANCH"
+    git merge --ff-only "fork/$FORK_BRANCH" 2>/dev/null || git reset --hard "fork/$FORK_BRANCH"
   else
     git checkout -b "$FORK_BRANCH" "fork/$FORK_BRANCH"
   fi
@@ -172,16 +195,27 @@ if [ "$IS_GIT_REPO" -eq 1 ]; then
     cp "$REPO_DIR/.env.example" "$REPO_DIR/.env"
   fi
 
-  ops_log "Installing dependencies (npm install --legacy-peer-deps)..."
+  # Package installation
   if command -v npm >/dev/null 2>&1; then
-    npm install --legacy-peer-deps
+    if [ "$LITE_MODE" -eq 1 ]; then
+      ops_log "Fast-installing production dependencies (--omit=dev --no-audit --no-fund)..."
+      npm install --legacy-peer-deps --omit=dev --no-audit --no-fund --prefer-offline
+    else
+      ops_log "Installing dependencies (npm install --legacy-peer-deps)..."
+      npm install --legacy-peer-deps
+    fi
   fi
 
-  ops_log "Building project..."
-  if npm run build >/dev/null 2>&1; then
-    ops_log "Build successful."
+  # Build step
+  if [ "$SKIP_BUILD" -eq 1 ]; then
+    ops_log "Skipping UI build (--skip-build/--lite active). Run 'npm run dev' for immediate API server."
   else
-    ops_log "Note: Production build had non-critical warnings; dev mode is ready."
+    ops_log "Building project..."
+    if npm run build >/dev/null 2>&1; then
+      ops_log "Build successful."
+    else
+      ops_log "Note: Production build had non-critical warnings; dev mode is ready."
+    fi
   fi
 
 # ── 4. Upgrade Global npm Installation ───────────────────────────────────────
@@ -194,7 +228,7 @@ elif [ "$IS_GLOBAL_NPM" -eq 1 ]; then
 
   ops_confirm "Ready to upgrade global npm package 'omniroute' to the fork?" || ops_die "upgrade cancelled"
   ops_log "Running: npm install -g git+$FORK_REPO#$FORK_BRANCH"
-  npm install -g "git+$FORK_REPO#$FORK_BRANCH"
+  npm install -g --omit=dev --no-audit --no-fund "git+$FORK_REPO#$FORK_BRANCH"
 
 # ── 5. Docker Upgrade Guidance ───────────────────────────────────────────────
 elif [ "$IS_DOCKER" -eq 1 ]; then
