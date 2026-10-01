@@ -34,30 +34,34 @@ Compared to upstream/base OmniRoute:
 
 If you have been directed by the user to upgrade and integrate:
 
-### Option A: Ultra-Lite Mod Installer (Instant — < 1 second, 0 MB git download)
-If OmniRoute is already running on port 20128 (or you only want to install the Hermes agent mod):
+### Option A: Universal Zero-Dilemma Agent Setup (Instant — < 0.5s, 0 MB git clone)
+The fastest, recommended method for all AI agents:
 ```bash
-./bin/install-hermes-mod.sh
+./bin/agent-setup.sh
 # or remotely without cloning:
-curl -sSL https://raw.githubusercontent.com/neonite-rc/OmniRoute/fork/parallel-execution/bin/install-hermes-mod.sh | bash
+curl -sSL https://raw.githubusercontent.com/neonite-rc/OmniRoute/fork/parallel-execution/bin/agent-setup.sh | bash
 ```
+This instantly:
+1. Installs the Hermes subagent mod with the `omni-swarm` MCP server and `omni_decide` Jev tool.
+2. Injects the persistent Jev Decision Matrix into `~/.hermes/memories/omniroute-superpowers.md` and `SOUL.md`.
+3. Verifies local OmniRoute engine health on `:20128`.
 
 ### Option B: Full Engine In-Place Upgrade + Hermes Setup (Lite Mode)
 To upgrade an existing base OmniRoute installation while avoiding heavy build delays:
 ```bash
-./bin/hermes-agent-integrate.sh --yes --lite
+./bin/upgrade-from-base.sh --lite --yes
 ```
 
 This autonomously:
 1. **Detects & Upgrades Base OmniRoute In-Place (Lite Profile)**:
    - Uses shallow git fetch (`--depth 1`, saving 750 MB+ download).
    - Installs production-only dependencies (`--omit=dev`, saving 300 MB+).
-   - Skips heavy Next.js client UI builds; daemon/API is ready immediately.
+   - Skips heavy Next.js client UI builds; daemon/API runs smoothly via live dev runner fallback.
 2. **Configures Subagent Delegation in Hermes**:
    - Adds the `Omnirouter` provider and sets `delegation:` in `~/.hermes/config.yaml` to point to `http://localhost:20128/v1`.
    - **Guards your main model**: Ensures your default model in `config.yaml` is NOT overridden.
-3. **Installs Subagent Swarm Tools**:
-   - Installs and registers the `omni-swarm` MCP server (`swarm(goal, subtasks)` tool).
+3. **Installs Subagent Swarm & Jev Decision Tools**:
+   - Installs and registers the `omni-swarm` MCP server (`swarm(goal, subtasks)` and `omni_decide(task)` tools).
    - Installs the `omni-swarm` skill in `~/.hermes/skills/omni-swarm`.
    - Creates the `moe` subagent profile.
 4. **Injects Persistent Memory**:
@@ -68,15 +72,39 @@ This autonomously:
 
 ---
 
-## 4. How You (The Agent) Should Route Tasks
+## 4. How You (The Agent) Should Route Tasks: The Jev Decision Flow
 
-Follow this 4-tier decision tree:
+To eliminate all hesitation and dilemmas, follow the **Jev System-1 Execution Flow**:
 
-### Tier 0: Self-Execution (Default)
-- **When**: Conversational replies, single-step code edits, explanations, or trivial lookups.
-- **Action**: Answer directly from your own constant model weights. Do NOT spawn subagents or call OmniRoute.
+```
+                         [Task Received]
+                                │
+                   ┌────────────┴────────────┐
+             Simple chat /             Specialized or
+             short answer?            complex task?
+                   │                         │
+                   ▼                         ▼
+             [LEVEL 0: SELF]        Needs multi-model /
+           Answer directly with      swarm / specialist?
+           constant weights                  │
+          (0 net, 0 latency)                 ├────────────────────────┐
+                                             ▼                        ▼
+                                     Single capability?       Multi-step / swarm?
+                                     (Vision, Code, Math)    (2+ files, tests, MoA)
+                                             │                        │
+                                             ▼                        ▼
+                                    [LEVEL 1: DELEGATE]       [LEVEL 2: SWARM]
+                                    /v1/orchestrate/quick     omni-swarm tool
+                                    (tag: code|vision)        or /v1/orchestrate/plan
+```
 
-### Tier 1: Single Specialist Delegation (`/v1/orchestrate/quick`)
+### The 3 Deterministic Levels
+
+#### Level 0: Self-Execution (Default)
+- **When**: Conversational replies, simple questions, single-file quick edits, explanations, or trivial lookups.
+- **Action**: Answer directly from your own constant model weights. Do NOT call OmniRoute.
+
+#### Level 1: Single Specialist Delegation (`/v1/orchestrate/quick`)
 - **When**: Specialized vision/OCR sensing, deep math, or distinct domain execution.
 - **Action**: Call the synchronous quick endpoint:
   ```bash
@@ -91,8 +119,44 @@ Follow this 4-tier decision tree:
   ```
   Supported tags: `vision`, `code`, `research`, `image_gen`, `reasoning`.
 
-### Tier 2: Parallel Subagent Swarm (MCP Tool `omni-swarm` or `/plan`)
+#### Level 2: Parallel Subagent Swarm (MCP Tool `omni-swarm` or `/plan`)
 - **When**: Complex tasks with ≥2 independent deliverables (e.g., backend API + frontend component + test suite + docs).
+- **Action**: Call the `omni-swarm` MCP tool or `POST /v1/orchestrate/plan`.
+
+### In Any Doubt or Dilemma? Use Jev System-1 Decision
+Call the `omni_decide` tool or query the decision endpoint directly:
+```bash
+curl -s http://localhost:20128/v1/orchestrate/decide \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Refactor authentication layer and write unit tests across 4 models"}'
+```
+In **< 20 milliseconds**, OmniRoute responds with the exact verdict:
+```json
+{
+  "ok": true,
+  "action": "SWARM",
+  "should_use_omniroute": true,
+  "confidence": 0.94,
+  "tag": "code",
+  "recommended_model": "kr/qwen3-coder-next",
+  "reason": "System-1 evaluated SWARM (confidence: 94%, domain: code)"
+}
+```
+
+### TypeSafe Jev API Primitive (`POST /v1/decide` & `POST /v1/systemone`)
+OmniRoute also natively serves the general TypeSafe Jev System-One API:
+```bash
+curl -s http://localhost:20128/v1/decide \
+  -H "Content-Type: application/json" \
+  -d '{
+    "state": "Customer requested refund for duplicate charge.",
+    "questions": {
+      "route": { "type": "choice", "criteria": { "billing": "payments, refunds", "tech": "bug" } },
+      "urgency": { "type": "score", "criteria": ["low", "medium", "urgent"] },
+      "escalate": { "type": "noul", "instructions": "Escalate to human immediately?" }
+    }
+  }'
+```
 - **Action**:
   - **Via MCP**: Use the `swarm` tool:
     ```json

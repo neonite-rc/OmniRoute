@@ -272,6 +272,33 @@ server = MCPServer("omni-swarm")
 
 @server.tool(
     description=(
+        "Jev System-1 Decision Tool: Instantly eliminates agent dilemma (< 50ms). "
+        "Evaluates whether a task should be executed directly by your constant brain (SELF), "
+        "delegated to a specialist model (DELEGATE), or fanned out into a parallel multi-model swarm (SWARM). "
+        "Returns the exact recommended model, domain tag, and execution strategy."
+    )
+)
+def omni_decide(task: str) -> dict:
+    """Fast Jev-style System-1 decision to resolve agent routing dilemma."""
+    try:
+        res = _api("POST", "/orchestrate/decide", {"task": task}, timeout=5)
+        if isinstance(res, dict) and res.get("ok"):
+            return res
+    except Exception as e:
+        pass
+    # Local fallback heuristic if OmniRoute is momentarily unreachable
+    t_lower = task.lower()
+    multi = any(k in t_lower for k in ["parallel", "swarm", "across", "compare", "test suites", "multi-file", "refactor"])
+    spec = any(k in t_lower for k in ["vision", "image", "diagram", "screenshot", "deep code", "audit"])
+    if multi:
+        return {"ok": True, "action": "SWARM", "should_use_omniroute": True, "recommended_model": "kr/qwen3-coder-next", "tag": "code", "reason": "Decomposable multi-step task"}
+    if spec:
+        return {"ok": True, "action": "DELEGATE", "should_use_omniroute": True, "recommended_model": "kiro/claude-sonnet-4.5", "tag": "vision", "reason": "Specialized model capability"}
+    return {"ok": True, "action": "SELF", "should_use_omniroute": False, "recommended_model": "constant-brain", "reason": "Direct single-turn conversational answer"}
+
+
+@server.tool(
+    description=(
         "Run subtasks as a real specialist team: each subtask executes as a "
         "headless Hermes worker (own tools/files/workspace) on an OmniRoute "
         "model chosen by router evidence. Independent subtasks run "

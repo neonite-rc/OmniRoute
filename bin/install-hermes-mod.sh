@@ -154,12 +154,31 @@ MCP_DIR="${HERMES_DIR}/mcp-servers/omni-swarm"
 mkdir -p "$MCP_DIR"
 cat > "${MCP_DIR}/server.py" << 'PYEOF'
 #!/usr/bin/env python3
-"""omni-swarm — high-concurrency headless subagent swarm over OmniRoute."""
+"""omni-swarm — high-concurrency headless subagent swarm & Jev decision engine."""
 import json, os, subprocess, sys, time, urllib.request
 
 OMNIROUTE_BASE = os.environ.get("OMNIROUTE_BASE_URL", "http://localhost:20128/v1")
 API_KEY = os.environ.get("HERMES_CUSTOM_LOCALHOST_20128_API_KEY", "")
 LEDGER = os.path.expanduser("~/.hermes/omni-swarm/ledger.json")
+
+def decide_task(task):
+    """Jev System-1 fast decision solver for agent dilemma."""
+    try:
+        req = urllib.request.Request(
+            f"{OMNIROUTE_BASE}/orchestrate/decide",
+            data=json.dumps({"task": task}).encode(),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return json.loads(r.read())
+    except Exception:
+        t_low = task.lower()
+        if any(k in t_low for k in ["parallel", "swarm", "across", "compare", "multi-file"]):
+            return {"ok": True, "action": "SWARM", "should_use_omniroute": True, "recommended_model": "kr/qwen3-coder-next", "tag": "code"}
+        if any(k in t_low for k in ["vision", "image", "diagram", "screenshot", "deep"]):
+            return {"ok": True, "action": "DELEGATE", "should_use_omniroute": True, "recommended_model": "kiro/claude-sonnet-4.5", "tag": "vision"}
+        return {"ok": True, "action": "SELF", "should_use_omniroute": False, "recommended_model": "constant-brain"}
 
 def read_ledger():
     try:
@@ -185,18 +204,19 @@ def run_worker(model, prompt):
         return {"ok": False, "out": str(e), "ms": int((time.time() - t0) * 1000), "model": model}
 
 if __name__ == "__main__":
-    # Standard MCP stdio transport or CLI usage
-    pass
+    if len(sys.argv) > 1 and sys.argv[1] == "decide":
+        print(json.dumps(decide_task(" ".join(sys.argv[2:])), indent=2))
 PYEOF
 chmod +x "${MCP_DIR}/server.py"
-log "MCP server omni-swarm installed"
+log "MCP server omni-swarm installed (with Jev System-1 decide support)"
 
 # ── 5. Install omni-swarm Skill ──────────────────────────────────────────────
 SKILL_DIR="${HERMES_DIR}/skills/omni-swarm"
 mkdir -p "$SKILL_DIR"
 cat > "${SKILL_DIR}/SKILL.md" << 'MDEOF'
-# omni-swarm — dynamic specialist swarm over OmniRoute
+# omni-swarm — dynamic specialist swarm & Jev decision engine
 Run subtasks simultaneously across diverse providers via OmniRoute (4-8+ parallel models).
+- Resolve dilemmas instantly with `omni_decide(task)` or Jev decision flow.
 - Spawns independent subagents via `hermes chat --oneshot -m <model> -q '<prompt>'`
 - Collects and synthesizes results under the constant main agent.
 MDEOF
@@ -206,24 +226,25 @@ log "Skill omni-swarm installed"
 MEM_DIR="${HERMES_DIR}/memories"
 mkdir -p "$MEM_DIR"
 cat > "${MEM_DIR}/omniroute-superpowers.md" << 'MEMEOF'
-# Memory: OmniRoute Subagent Mesh & Parallel Powers
+# Memory: OmniRoute Subagent Mesh & Jev Decision Flow
 
 ## Architectural Role
 - **Main Agent (Hermes)**: Stays on its constant primary model. Retains user context, executive planning, and response synthesis.
 - **Subagent Federation (OmniRoute)**: Accessible at `http://localhost:20128/v1`. Reserved exclusively for spawning subagents, parallel swarms, and specialist delegations across diverse providers (Kiro, NVIDIA NIM, OpenAI, Anthropic, Gemini, DeepSeek).
 
-## Powers & Capabilities
-1. **High Concurrency**: 4 to 8+ concurrent model requests simultaneously without 503 errors.
-2. **Subagent Delegation Endpoints**:
-   - `POST /v1/orchestrate/quick`: Fast synchronous task execution with specialized tags (`vision`, `code`, `research`, `image_gen`, `reasoning`).
-   - `POST /v1/orchestrate/plan`: Parallel/swarm DAG task execution with dependencies.
-   - `GET /v1/orchestrate/jobs/{id}/wait-first`: Fast per-completion wake-up polling.
-   - `POST /v1/orchestrate/spawn`: Hierarchical subagent job creation.
-   - `POST /v1/route`: Query ranked model candidates by task capability and benchmark scores.
-3. **MCP Tool omni-swarm**:
-   - `swarm(goal, subtasks)`: Fans out headless worker agents across diverse providers and logs reliability into `~/.hermes/omni-swarm/ledger.json`.
-4. **Bias Guard**:
-   - Pass `"caller_model": "<your-model>"` in orchestrator calls so OmniRoute avoids picking your own model family for subagents on ties.
+## The Jev Decision Matrix (Zero Dilemma: When & How to Use OmniRoute)
+Whenever you receive a prompt or task, evaluate it against this deterministic 3-level flow:
+1. **Level 0 (SELF)**: Conversational chat, small query, greetings, direct reasoning -> Answer directly with your constant model weights (0 network calls, 0 delay).
+2. **Level 1 (DELEGATE)**: Single task needing specialized capability -> Call `POST /v1/orchestrate/quick` (tag: `vision` | `code` | `reasoning`) or `hermes chat --oneshot -m <model> -q '<task>'`.
+3. **Level 2 (SWARM)**: Decomposable tasks (2+ independent files, test suites, architecture refactors, parallel verification) -> Call tool `omni-swarm(goal, subtasks)`.
+4. **In Any Doubt?**: Call `omni_decide(task)` or `POST /v1/orchestrate/decide`. It returns the exact recommendation in 15ms.
+
+## Powers & Endpoints
+- `POST /v1/decide` / `POST /v1/systemone`: TypeSafe Jev System-1 decision endpoint (choice, score, noul).
+- `POST /v1/orchestrate/decide`: Instant agent dilemma solver.
+- `POST /v1/orchestrate/quick`: Fast synchronous task execution by capability tag (`vision`, `code`, `research`, `reasoning`).
+- `POST /v1/orchestrate/plan`: Parallel/swarm DAG task execution with dependencies.
+- `MCP omni-swarm`: Multi-provider worker fan-out with ledger logging.
 MEMEOF
 log "Persistent memory saved to ${MEM_DIR}/omniroute-superpowers.md"
 
@@ -231,10 +252,14 @@ log "Persistent memory saved to ${MEM_DIR}/omniroute-superpowers.md"
 if ! grep -q "OmniRoute Subagent Federation" "${HERMES_DIR}/SOUL.md" 2>/dev/null; then
   cat >> "${HERMES_DIR}/SOUL.md" << 'SOULEOF'
 
-## EXECUTION POLICY — OmniRoute Subagent Federation (appended)
+## EXECUTION POLICY — OmniRoute Subagent Federation & Jev Decision Flow
 1. Main Agent Constancy: Your default model is CONSTANT. Never switch models for direct user dialog.
-2. OmniRoute Reserved for Subagents: OmniRoute (:20128) is your subagent execution cluster. Use it to spawn subagents, swarms, and specialist calls across diverse providers.
-3. Level 0 Self-Execution: Answer simple queries directly with your constant weights.
+2. Jev Dilemma Rule:
+   - Simple queries -> Answer immediately (SELF).
+   - Specialized single tasks -> DELEGATE via `/v1/orchestrate/quick`.
+   - Multi-step parallel tasks -> SWARM via `omni-swarm`.
+   - When uncertain -> Call `omni_decide` or `POST /v1/orchestrate/decide` (15ms decision).
+3. OmniRoute Reserved for Subagents: OmniRoute (:20128) is your subagent cluster.
 SOULEOF
   log "SOUL.md: execution policy appended"
 fi
