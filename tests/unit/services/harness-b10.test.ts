@@ -30,7 +30,6 @@ const {
 } = await import("../../../open-sse/services/harness/orchestrator.ts");
 import type {
   OrchestrateJob,
-  OrchestrateTask,
   TaskDispatch,
 } from "../../../open-sse/services/harness/orchestrator.ts";
 import { assignModels, type AllocatorCandidate } from "../../../open-sse/services/harness/allocator.ts";
@@ -423,7 +422,7 @@ test("e2e: stream mode requeues failures and retries", async () => {
   store.createJob(job, null);
 
   let calls = 0;
-  const dispatch: TaskDispatch = async (input) => {
+  const dispatch: TaskDispatch = async (_input) => {
     calls += 1;
     if (calls === 1) return { ok: false, error: "transient" };
     return { ok: true, text: "second try", model: "m", provider: "p" };

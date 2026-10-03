@@ -27,7 +27,7 @@ import {
   QUALITY_FLOOR,
   type ModelStat,
 } from "@omniroute/open-sse/services/harness/allocator.ts";
-import { MODALITY_BY_TAG, type TaskModality, type TaskType } from "@omniroute/open-sse/services/harness/orchestrator.ts";
+import { MODALITY_BY_TAG, type TaskType } from "@omniroute/open-sse/services/harness/orchestrator.ts";
 
 let ensured = false;
 

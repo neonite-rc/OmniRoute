@@ -10,6 +10,7 @@
  * still one import away for the combo dispatcher and the HTTP API.
  */
 
+import { toNumber } from "@/shared/utils/numeric";
 import { getAllImageModels } from "../../config/imageRegistry.ts";
 import { getAllRerankModels } from "../../config/rerankRegistry.ts";
 import { getAllVideoModels } from "../../config/videoRegistry.ts";
@@ -155,13 +156,6 @@ export function parseTagPanelSpec(value: unknown): TagPanelSpec | null {
   if (!isModelCategory(raw.category)) return null;
   const spec: TagPanelSpec = { category: raw.category };
   // Numeric strings coerce (zod's z.coerce may not have run on legacy rows).
-  const toNumber = (value: unknown): number | undefined => {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
-      return Number(value);
-    }
-    return undefined;
-  };
   const size = toNumber(raw.size);
   if (size !== undefined) spec.size = Math.floor(size);
   const minBenchmark = toNumber(raw.minBenchmark);
