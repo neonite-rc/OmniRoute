@@ -15,13 +15,11 @@ import {
   ORCHESTRATE_DEFAULTS,
   normalizeAppendTasks,
   taskRowsFromSpecs,
-  inferTaskTag,
   type OrchestrateJob,
   type OrchestratePlanBody,
   type PlanValidation,
   type TaskDispatch,
   type TaskModality,
-  type TaskType,
   validatePlan,
 } from "@omniroute/open-sse/services/harness/orchestrator.ts";
 

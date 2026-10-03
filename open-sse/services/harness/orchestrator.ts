@@ -1210,7 +1210,6 @@ function effectivePrompt(
 export async function runJob(jobId: string, deps: RunnerDeps): Promise<void> {
   const { store, dispatch } = deps;
   const now = deps.now ?? Date.now;
-  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const log: LogFn = (taskId, event, detail = null) =>
     void Promise.resolve(store.appendLog({ jobId, taskId, event, detail }, now()));
 
@@ -1989,7 +1988,7 @@ async function runStream(jobId: string, deps: RunnerDeps, log: LogFn): Promise<v
 }
 
 async function relayQuestion(
-  jobId: string,
+  _jobId: string,
   ask: { from: string; to: string; question: string },
   target: OrchestrateTask,
   deps: RunnerDeps,

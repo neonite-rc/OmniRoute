@@ -155,18 +155,18 @@ export function parseTagPanelSpec(value: unknown): TagPanelSpec | null {
   if (!isModelCategory(raw.category)) return null;
   const spec: TagPanelSpec = { category: raw.category };
   // Numeric strings coerce (zod's z.coerce may not have run on legacy rows).
-  const toNumber = (value: unknown): number | undefined => {
+  const safeToNumber = (value: unknown): number | undefined => {
     if (typeof value === "number" && Number.isFinite(value)) return value;
     if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
       return Number(value);
     }
     return undefined;
   };
-  const size = toNumber(raw.size);
+  const size = safeToNumber(raw.size);
   if (size !== undefined) spec.size = Math.floor(size);
-  const minBenchmark = toNumber(raw.minBenchmark);
+  const minBenchmark = safeToNumber(raw.minBenchmark);
   if (minBenchmark !== undefined) spec.minBenchmark = Math.min(Math.max(minBenchmark, 0), 100);
-  const perProvider = toNumber(raw.perProvider);
+  const perProvider = safeToNumber(raw.perProvider);
   if (perProvider !== undefined) spec.perProvider = Math.max(Math.floor(perProvider), 1);
   if (Array.isArray(raw.providers)) {
     const providers = raw.providers.filter((p): p is string => typeof p === "string" && p.trim() !== "");

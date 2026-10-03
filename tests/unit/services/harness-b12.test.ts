@@ -242,7 +242,7 @@ test("self-assessment: the caller competes under the IDENTICAL score", () => {
   assert.ok(loserSelf.rank !== null && loserSelf.rank > 1);
 
   // Filtered out → honest status.
-  const filteredSelf = selfAssess("basic/plain-chat", filterCandidates(descriptors, { modality: "image" }).candidates.length ? [] : ranked, descriptors);
+  selfAssess("basic/plain-chat", filterCandidates(descriptors, { modality: "image" }).candidates.length ? [] : ranked, descriptors);
   // (plain-chat IS filtered by the image rule in the second list)
   const imageRanked = rankCandidates(filterCandidates(descriptors, { modality: "image" }).candidates, {}, 3);
   const filtered = selfAssess("basic/plain-chat", imageRanked, descriptors);

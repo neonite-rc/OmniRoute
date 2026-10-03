@@ -15,7 +15,6 @@ process.env.DATA_DIR = TEST_DATA_DIR;
 process.env.API_KEY_SECRET = process.env.API_KEY_SECRET || "harness-b16-test-secret";
 
 import {
-  TOOL_REGISTRY,
   browserTools,
   getTool,
   selfExecutableTools,
