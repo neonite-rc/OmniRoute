@@ -544,7 +544,6 @@ function dateVersion(now: number): string {
 export function refreshRegistry(now: number = Date.now()): RegistryVersion {
   // Late import avoids a cycle: liveIndex resets and rebuilds from the
   // provider registry (this module stays import-pure for tests).
-
   resetTagIndexCache();
   registryRefreshedAt = now;
   registryVersion = dateVersion(now);
@@ -611,7 +610,6 @@ export function candidateMatrixLines(
   ranked: RankedCandidate[],
   context: { category?: string; selfModel?: string | null } = {}
 ): string[] {
-
   const lines: string[] = [];
   for (const candidate of ranked) {
     const d = candidate.descriptor;
