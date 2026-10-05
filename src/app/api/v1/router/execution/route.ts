@@ -87,7 +87,7 @@ async function handle(request: NextRequest, body: Record<string, unknown> | null
   const decision = executionDecision(profile, { tools });
   const requiredToolCapabilities = toolCapabilitiesForDomain(profile.domain);
   const matchedTools = requiredToolCapabilities.length > 0 ? toolsForCapabilities(requiredToolCapabilities) : tools.filter((tool) => tool.capabilities.includes("browser") || tool.capabilities.includes("web_search"));
-  const agents = profile.requiresFreshInformation ? agentsWithEvidence(profile) : [];
+  const agents = profile.requiresFreshInformation ? agentsWithEvidence() : [];
 
   // Models: the same capability-evidence ranking as the candidates route.
   ensureRegistryFresh();
