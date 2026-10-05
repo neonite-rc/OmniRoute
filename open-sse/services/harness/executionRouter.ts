@@ -166,7 +166,7 @@ export type AgentWithEvidence = AgentDescriptor & {
  * Attach workflow memory evidence to matching agents — §14: the evidence
  * for research paths is WORKFLOW performance, never model benchmarks.
  */
-export function agentsWithEvidence(profile: ExecutionProfile): AgentWithEvidence[] {
+export function agentsWithEvidence(_profile: ExecutionProfile): AgentWithEvidence[] {
   const required = ["web_research"];
   const matched = agentsForCapabilities(required);
   return matched.map((agent) => ({

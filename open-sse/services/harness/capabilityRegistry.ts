@@ -41,7 +41,7 @@
  * Pure module: no DB, no clock, no globals — every input is a parameter.
  */
 
-import { resetModelTagIndexCache, type ModelTagEntry, type ModelTagIndex } from "../modelTags/index.ts";
+import { resetModelTagIndexCache, type ModelTagEntry } from "../modelTags/index.ts";
 import type { ModelStat } from "./allocator.ts";
 
 /** The liveIndex cache reset — deprecated models leave with the rebuild. */
@@ -544,7 +544,6 @@ function dateVersion(now: number): string {
 export function refreshRegistry(now: number = Date.now()): RegistryVersion {
   // Late import avoids a cycle: liveIndex resets and rebuilds from the
   // provider registry (this module stays import-pure for tests).
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   resetTagIndexCache();
   registryRefreshedAt = now;
   registryVersion = dateVersion(now);
@@ -611,7 +610,6 @@ export function candidateMatrixLines(
   ranked: RankedCandidate[],
   context: { category?: string; selfModel?: string | null } = {}
 ): string[] {
-  /* eslint-disable @typescript-eslint/no-explicit-any */
   const lines: string[] = [];
   for (const candidate of ranked) {
     const d = candidate.descriptor;

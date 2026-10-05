@@ -172,7 +172,6 @@ function planBody(overrides: Record<string, unknown> = {}) {
 function makeJob(overrides: Partial<OrchestrateJob> = {}): OrchestrateJob {
   const validation = validatePlan(planBody());
   assert.ok(validation.ok);
-  const now = Date.now();
   return {
     jobId: "job_b5",
     goal: validation.goal,
@@ -410,7 +409,6 @@ test("e2e: judge failures write drift penalties back to the served model", async
     planBody({ mode: "swarm", policy: { max_rounds: 3 } })
   );
   assert.ok(validation.ok);
-  const now = Date.now();
   const job: OrchestrateJob = {
     ...makeJob(),
     mode: "swarm",
