@@ -185,10 +185,18 @@ def _assign_model(
 
 
 def _load_ledger() -> dict:
+    if not LEDGER.exists():
+        return {}
     try:
         data = json.loads(LEDGER.read_text())
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except Exception as e:
+        corrupt = LEDGER.with_name(f"ledger.corrupt.{int(time.time())}")
+        try:
+            LEDGER.rename(corrupt)
+            sys.stderr.write(f"[omni-swarm] WARNING: Corrupt ledger backed up to {corrupt}: {e}\n")
+        except Exception:
+            pass
         return {}
 
 

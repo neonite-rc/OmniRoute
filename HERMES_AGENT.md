@@ -121,7 +121,8 @@ To eliminate all hesitation and dilemmas, follow the **Jev System-1 Execution Fl
 
 #### Level 2: Parallel Subagent Swarm (MCP Tool `omni-swarm` or `/plan`)
 - **When**: Complex tasks with ≥2 independent deliverables (e.g., backend API + frontend component + test suite + docs).
-- **Action**: Call the `omni-swarm` MCP tool or `POST /v1/orchestrate/plan`.
+- **Concurrency Bound**: Max 4 parallel workers per wave (strictly matching `OMNIROUTE_CHAT_MAX_HEAVY_IN_FLIGHT=4` in `.env` and MCP `MAX_PARALLEL=4`), up to 8 subtasks organized in sequential waves.
+- **Action**: Call the `omni-swarm` MCP tool (`swarm(goal, subtasks)`) or `POST /v1/orchestrate/plan`.
 
 ### In Any Doubt or Dilemma? Use Jev System-1 Decision
 Call the `omni_decide` tool or query the decision endpoint directly:
