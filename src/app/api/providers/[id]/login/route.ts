@@ -478,7 +478,12 @@ export async function POST(
     // Never echo the raw result: on a failure it can still carry the captured
     // cookie jar, which must not leave the server in a response body.
     return NextResponse.json(
-      { success: false, error: result.error || "Login failed" },
+      {
+        success: false,
+        // Hard Rule #12: the service's own error may still carry a raw
+        // browser/Playwright dump — never ship it to the dashboard as-is.
+        error: sanitizeErrorMessage(result.error) || "Login failed",
+      },
       { status: 400 }
     );
   } catch (err) {

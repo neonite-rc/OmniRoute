@@ -36,6 +36,9 @@ const KEYS = [
   "webSessionResyncButton",
   "webSessionResyncDone",
   "webSessionResyncDoneAlready",
+  "webSessionConnecting",
+  "webSessionManualGuideShow",
+  "webSessionManualGuideHide",
 ];
 
 /**
@@ -59,6 +62,9 @@ const VIETNAMESE = {
   webSessionResyncButton: "Đồng bộ lại phiên",
   webSessionResyncDone: "Đã thu thập và lưu phiên.",
   webSessionResyncDoneAlready: "Đã làm mới phiên từ hồ sơ trình duyệt đã lưu.",
+  webSessionConnecting: "Đang kết nối…",
+  webSessionManualGuideShow: "Dán thủ công — cách lấy thông tin xác thực phiên",
+  webSessionManualGuideHide: "Ẩn hướng dẫn thủ công",
 };
 
 const en = JSON.parse(await fs.readFile(path.join(MESSAGES, "en.json"), "utf8"));
@@ -74,7 +80,6 @@ const files = (await fs.readdir(MESSAGES)).filter((f) => f.endsWith(".json"));
 let changed = 0;
 
 for (const file of files) {
-  if (file === "en.json") continue;
   const full = path.join(MESSAGES, file);
   const raw = await fs.readFile(full, "utf8");
   const json = JSON.parse(raw);
@@ -85,6 +90,7 @@ for (const file of files) {
     continue;
   }
 
+  const isSource = file === "en.json";
   const isVietnamese = file === "vi.json";
   const missing = KEYS.filter((key) => typeof providers[key] !== "string");
 
@@ -99,7 +105,7 @@ for (const file of files) {
       rebuilt[key] = VIETNAMESE[key];
       continue;
     }
-    if (!isVietnamese && KEYS.includes(key) && typeof providers[key] === "string") {
+    if (!isSource && !isVietnamese && KEYS.includes(key) && typeof providers[key] === "string") {
       // Refresh the sentinel so it always carries the current English text.
       rebuilt[key] = `__MISSING__:${english[key]}`;
       continue;
@@ -107,23 +113,31 @@ for (const file of files) {
     rebuilt[key] = value;
     if (key === "webSessionGuideStep4") {
       for (const addKey of missing) {
-        rebuilt[addKey] = isVietnamese
-          ? VIETNAMESE[addKey]
-          : `__MISSING__:${english[addKey]}`;
+        rebuilt[addKey] = isSource
+          ? english[addKey]
+          : isVietnamese
+            ? VIETNAMESE[addKey]
+            : `__MISSING__:${english[addKey]}`;
       }
       inserted = true;
     }
   }
   if (!inserted) {
     for (const addKey of missing) {
-      rebuilt[addKey] = isVietnamese ? VIETNAMESE[addKey] : `__MISSING__:${english[addKey]}`;
+      rebuilt[addKey] = isSource
+        ? english[addKey]
+        : isVietnamese
+          ? VIETNAMESE[addKey]
+          : `__MISSING__:${english[addKey]}`;
     }
   }
   json.providers = rebuilt;
 
   await fs.writeFile(full, `${JSON.stringify(json, null, 2)}\n`, "utf8");
   changed++;
-  console.log(`${file}: ${isVietnamese ? "translated" : `+${missing.length}`}`);
+  console.log(
+    `${file}: ${isSource ? "source" : isVietnamese ? "translated" : `+${missing.length}`}`
+  );
 }
 
 console.log(`done — ${changed} locale(s) updated`);

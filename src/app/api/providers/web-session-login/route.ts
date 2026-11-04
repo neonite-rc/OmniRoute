@@ -78,7 +78,12 @@ export async function POST(request: Request) {
 
     if (!result.success || !result.credentials) {
       return NextResponse.json(
-        { success: false, error: result.error || "Sign-in did not complete" },
+        {
+          success: false,
+          // Hard Rule #12: the service's own error may still carry a raw
+          // browser/Playwright dump — never ship it to the dashboard as-is.
+          error: sanitizeErrorMessage(result.error) || "Sign-in did not complete",
+        },
         { status: 400 }
       );
     }

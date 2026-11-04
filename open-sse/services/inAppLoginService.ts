@@ -159,6 +159,46 @@ export function clearBrowserProfile(
   }
 }
 
+/**
+ * Turn a browser-launch failure into something the operator can act on.
+ *
+ * Playwright's raw failure is a multi-kilobyte dump: the browser command line,
+ * the launch call log, and a boxed banner. None of that helps the operator,
+ * and the single most common cause — no display on the OmniRoute host — is
+ * buried in the middle of it.
+ */
+export function describeBrowserLaunchFailure(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+
+  if (/Missing X server|\$DISPLAY|XServer|headless: true/i.test(raw)) {
+    return (
+      "The OmniRoute host has no display, so the sign-in browser cannot open. " +
+      "Run OmniRoute on a desktop machine, or start it with a virtual display " +
+      "(for example `xvfb-run npm run dev`), or paste the session credential manually."
+    );
+  }
+  if (/Executable doesn't exist|please run the following command to download new browsers/i.test(raw)) {
+    return (
+      "The Playwright browser is not installed on this host. " +
+      "Run `npx playwright install chromium` on the OmniRoute machine, or paste the " +
+      "session credential manually."
+    );
+  }
+  if (/EACCES|EPERM|Permission denied/i.test(raw)) {
+    return (
+      "The OmniRoute host could not start the sign-in browser (permission denied). " +
+      "Check the browser cache and data-directory permissions, or paste the session " +
+      "credential manually."
+    );
+  }
+
+  // Unknown failure: keep it short. The full Playwright dump is sanitized and
+  // truncated by the route layer, but there is no reason to ship the whole
+  // browser command line to the dashboard.
+  const firstLine = raw.split("\n").find((line) => line.trim().length > 0) ?? "unknown error";
+  return `Could not open the sign-in browser: ${firstLine.slice(0, 200)}`;
+}
+
 // ─── Service ────────────────────────────────────────────────────────────────
 
 export class InAppLoginService extends EventEmitter {
@@ -278,9 +318,14 @@ export class InAppLoginService extends EventEmitter {
 
     try {
       if (!context) {
-        const launched: import("playwright").Browser = await playwright.chromium.launch({
-          headless: false, // User must interact with the login page
-        });
+        let launched: import("playwright").Browser;
+        try {
+          launched = await playwright.chromium.launch({
+            headless: false, // User must interact with the login page
+          });
+        } catch (err) {
+          throw new Error(describeBrowserLaunchFailure(err));
+        }
         browser = launched;
         const ephemeralContext: import("playwright").BrowserContext =
           await launched.newContext(contextOptions);

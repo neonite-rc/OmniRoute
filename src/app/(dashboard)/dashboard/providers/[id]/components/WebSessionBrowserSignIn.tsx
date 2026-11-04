@@ -41,8 +41,8 @@ export interface WebSessionBrowserSignInProps {
   mode: "add" | "sync";
   /** Required in "sync" mode — the connection to persist onto. */
   connectionId?: string;
-  onCaptured?: (session: WebSessionCapturedSession) => void;
-  onSynced?: (session: { alreadySignedIn: boolean }) => void;
+  onCaptured?: (session: WebSessionCapturedSession) => void | Promise<void>;
+  onSynced?: (session: { alreadySignedIn: boolean }) => void | Promise<void>;
   t: ProviderMessageTranslator;
 }
 
@@ -83,8 +83,11 @@ export default function WebSessionBrowserSignIn({
   onSynced,
   t,
 }: WebSessionBrowserSignInProps) {
-  const [busy, setBusy] = useState(false);
+  // "signing-in" = the browser window is open and we wait for the operator.
+  // "saving" = the session was captured and the connection is being written.
+  const [phase, setPhase] = useState<"idle" | "signing-in" | "saving">("idle");
   const [error, setError] = useState<string | null>(null);
+  const busy = phase !== "idle";
 
   if (!supportsBrowserSignIn(provider)) return null;
 
@@ -94,7 +97,7 @@ export default function WebSessionBrowserSignIn({
   if (mode === "sync" && !connectionId) return null;
 
   const handleSignIn = async () => {
-    setBusy(true);
+    setPhase("signing-in");
     setError(null);
     try {
       const isSync = mode === "sync" && !!connectionId;
@@ -124,7 +127,8 @@ export default function WebSessionBrowserSignIn({
       }
 
       if (isSync) {
-        onSynced?.({ alreadySignedIn: data.alreadySignedIn === true });
+        setPhase("saving");
+        await onSynced?.({ alreadySignedIn: data.alreadySignedIn === true });
         return;
       }
 
@@ -139,7 +143,8 @@ export default function WebSessionBrowserSignIn({
         return;
       }
 
-      onCaptured?.({
+      setPhase("saving");
+      await onCaptured?.({
         credential: data.credential,
         providerSpecificData:
           data.providerSpecificData && typeof data.providerSpecificData === "object"
@@ -156,7 +161,7 @@ export default function WebSessionBrowserSignIn({
         )
       );
     } finally {
-      setBusy(false);
+      setPhase("idle");
     }
   };
 
@@ -193,11 +198,13 @@ export default function WebSessionBrowserSignIn({
           </p>
         </div>
         <Button size="sm" icon="login" loading={busy} onClick={handleSignIn} disabled={busy}>
-          {busy
-            ? providerText(t, "webSessionBrowserSignInWaiting", "Waiting for sign-in…")
-            : mode === "sync"
-              ? providerText(t, "webSessionResyncButton", "Re-sync session")
-              : providerText(t, "webSessionBrowserSignInButton", "Sign in with browser")}
+          {phase === "saving"
+            ? providerText(t, "webSessionConnecting", "Connecting…")
+            : phase === "signing-in"
+              ? providerText(t, "webSessionBrowserSignInWaiting", "Waiting for sign-in…")
+              : mode === "sync"
+                ? providerText(t, "webSessionResyncButton", "Re-sync session")
+                : providerText(t, "webSessionBrowserSignInButton", "Sign in with browser")}
         </Button>
         {error && <p className="text-xs text-rose-400">{error}</p>}
       </div>

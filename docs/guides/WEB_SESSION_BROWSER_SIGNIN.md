@@ -23,8 +23,10 @@ sign in as usual, and the session is captured and stored.**
 2. In **Add connection**, click **Sign in with browser**.
 3. A browser window opens on the OmniRoute host at the provider's sign-in page.
 4. Sign in there. OmniRoute watches the session and captures it as soon as the
-   provider's credential appears.
-5. The credential is pre-filled in the form. Click **Add connection** to save it.
+   provider's credential appears. The window closes on its own.
+5. The connection is **created and stored automatically** — there is no second
+   "Save" step. The dashboard returns to the connection list with the new
+   connection in it.
 
 For an existing connection, open **Edit** and click **Re-sync session** — the
 new session is stored directly on the connection, with no copy/paste step.
@@ -93,15 +95,18 @@ credential.
 ## Manual paste still works
 
 The manual path is unchanged and remains the fallback for providers without a
-known sign-in flow, for headless hosts, and for anyone who prefers it. The
-"Sign in with browser" panel sits above the manual instructions in the
-credential dialog.
+known sign-in flow, for headless hosts, and for anyone who prefers it. When
+browser sign-in is available, the manual instructions are collapsed behind a
+**"Manual paste"** row so the one-click route stays the obvious choice; the
+credential field itself stays visible, and a captured session is also written
+into it — so a failed automatic save can be retried from the form.
 
 ## Troubleshooting
 
 | Symptom                                              | What it means                                                                             |
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | "Browser sign-in is not available for '<provider>'"   | No token-extraction config for that provider — paste the credential manually.               |
+| "The OmniRoute host has no display…"                  | The host is headless, so the sign-in browser cannot open. Use a virtual display (`xvfb-run npm run dev`) or paste the credential manually. |
 | "Login timed out"                                    | The credential never appeared in the browser session. Sign in again, or raise the timeout.  |
 | "The browser session did not yield a usable credential" | The session was captured but the provider expected a different credential kind.           |
 | The browser window does not appear                    | The OmniRoute host has no display (headless server). Use the manual paste, or run with a virtual display. |
