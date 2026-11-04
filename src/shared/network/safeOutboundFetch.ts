@@ -28,6 +28,7 @@ export type SafeOutboundFetchErrorCode =
   | "URL_GUARD_BLOCKED"
   | "TIMEOUT"
   | "REDIRECT_BLOCKED"
+  | "HEADERS_OVERFLOW"
   | "NETWORK_ERROR";
 
 export interface SafeOutboundFetchRetryOptions {
@@ -242,6 +243,51 @@ async function cancelResponseBody(response: Response) {
   }
 }
 
+function getErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const direct = (error as { code?: unknown }).code;
+  const fromCause = (error as { cause?: { code?: unknown } }).cause?.code;
+  const code = typeof direct === "string" ? direct : fromCause;
+  return typeof code === "string" ? code : undefined;
+}
+
+const HEADERS_OVERFLOW_CAUSE_CODE = "UND_ERR_HEADERS_OVERFLOW";
+// Native fetch (undici) caps response headers at http.maxHeaderSize (16 KB by default). Some
+// provider fronts answer with more than that — gemini.google.com/app sends ~26 KB — so the probe
+// dies with `TypeError: fetch failed` instead of reporting anything useful about the credential.
+const HEADERS_BUDGET_BYTES = 256 * 1024;
+
+export function isHeadersOverflowError(error: unknown): boolean {
+  return getErrorCode(error) === HEADERS_OVERFLOW_CAUSE_CODE;
+}
+
+const HEADERS_OVERFLOW_MESSAGE =
+  "Provider response headers exceeded the runtime limit (UND_ERR_HEADERS_OVERFLOW, " +
+  "http.maxHeaderSize = 16 KB by default). This is a transport limit, not a credential problem — " +
+  "start OmniRoute with NODE_OPTIONS=--max-http-header-size=65536 to raise it.";
+
+let headersBudgetFetchOverride: typeof globalThis.fetch | null = null;
+let headersBudgetAgent: import("undici").Dispatcher | null = null;
+
+/** Test seam: replace the widened-budget fetch so unit tests stay offline. */
+export function __setHeadersBudgetFetchForTest(fetchImpl: typeof globalThis.fetch | null): void {
+  headersBudgetFetchOverride = fetchImpl;
+}
+
+async function getHeadersBudgetFetch(): Promise<typeof globalThis.fetch> {
+  if (headersBudgetFetchOverride) return headersBudgetFetchOverride;
+
+  // Node's global fetch rejects a dispatcher from a different undici copy
+  // (UND_ERR_INVALID_ARG), so the widened budget has to come from undici's own fetch + Agent.
+  const { fetch: undiciFetch, Agent } = await import("undici");
+  const agent = (headersBudgetAgent ??= new Agent({ maxHeaderSize: HEADERS_BUDGET_BYTES }));
+  return ((input: RequestInfo | URL, init?: RequestInit) =>
+    undiciFetch(input as string | URL, {
+      ...(init as Parameters<typeof undiciFetch>[1]),
+      dispatcher: agent,
+    })) as unknown as typeof globalThis.fetch;
+}
+
 function normalizeFetchFailure(
   error: unknown,
   targetUrl: string,
@@ -261,6 +307,17 @@ function normalizeFetchFailure(
       attempts,
       timeoutMs: error.timeoutMs,
       isRetryable: true,
+      cause: error,
+    });
+  }
+
+  if (isHeadersOverflowError(error)) {
+    return new SafeOutboundFetchError(HEADERS_OVERFLOW_MESSAGE, {
+      code: "HEADERS_OVERFLOW",
+      url: targetUrl,
+      method,
+      attempts,
+      isRetryable: false,
       cause: error,
     });
   }
@@ -346,6 +403,30 @@ export async function safeOutboundFetch(url: string | URL, options: SafeOutbound
       return response;
     } catch (error) {
       const normalizedError = normalizeFetchFailure(error, targetUrl.toString(), method, attempt);
+
+      // The runtime's native fetch gave up on response headers the server really did send.
+      // Re-probe once with a widened budget; a configured proxy is left alone so its routing
+      // (and the caller's privacy expectations) are not silently bypassed.
+      if (
+        normalizedError.code === "HEADERS_OVERFLOW" &&
+        !proxyConfig &&
+        fetchOptions.body === undefined
+      ) {
+        const headersBudgetFetch = await getHeadersBudgetFetch();
+        try {
+          return await fetchWithTimeout(targetUrl.toString(), {
+            ...fetchOptions,
+            method,
+            redirect,
+            signal,
+            timeoutMs,
+            fetchFn: headersBudgetFetch,
+          });
+        } catch {
+          throw normalizedError;
+        }
+      }
+
       const shouldRetry =
         retryConfig.shouldRetryMethod &&
         attempt < retryConfig.attempts &&
