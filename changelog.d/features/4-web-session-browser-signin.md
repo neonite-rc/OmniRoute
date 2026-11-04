@@ -1,0 +1,1 @@
+- **feat(providers):** capture web-session provider credentials from a real browser — "Sign in with browser" in the add-connection dialog and "Re-sync session" in the edit dialog, backed by a persistent per-provider browser profile so a re-sync reuses the still-valid session ([#4](https://github.com/neonite-rc/OmniRoute/pull/4))
