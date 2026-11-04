@@ -51,8 +51,8 @@ new session is stored directly on the connection, with no copy/paste step.
 4. Sign in. The window closes by itself as soon as the credential appears.
 5. The dashboard is back on the connection list with the new connection in it.
 
-**Expect:** one connection, named as in the **Name** field, `testStatus:
-active`, and no "Save" click anywhere.
+**Expect:** one connection, named as in the **Name** field, `testStatus: active`,
+and no "Save" click anywhere.
 
 ### 2. Verify what was stored
 
@@ -67,6 +67,9 @@ sqlite3 "$DATA_DIR/storage.sqlite" \
      FROM provider_connections
     WHERE provider = 'gemini-web';"
 ```
+
+`$DATA_DIR` defaults to `~/.omniroute` — so the default path is
+`~/.omniroute/storage.sqlite`.
 
 > This prints a **live session credential**. Treat the output as a secret — do
 > not paste it into a ticket, a chat, or a screenshot.
@@ -105,6 +108,9 @@ sign-in flow again, delete it:
 ```bash
 rm -rf "$DATA_DIR/browser-profiles/<provider>"
 ```
+
+(`$DATA_DIR` defaults to `~/.omniroute`, so the default path is
+`~/.omniroute/browser-profiles/<provider>`.)
 
 The next **Re-sync session** opens a signed-out window.
 
