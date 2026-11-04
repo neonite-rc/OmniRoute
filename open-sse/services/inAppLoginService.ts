@@ -13,18 +13,39 @@
  */
 
 import { EventEmitter } from "events";
+import fs from "node:fs";
+import path from "node:path";
 import {
   TOKEN_EXTRACTION_CONFIGS,
   TokenExtractionConfig,
   type TokenSource,
 } from "./tokenExtractionConfig";
 import { matchesCookieDomain } from "../utils/cookieDomain";
+import { resolveDataDir } from "@/lib/dataPaths";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface LoginResult {
   success: boolean;
   credentials?: Record<string, string>;
+  /**
+   * Every cookie observed in the provider's domain during the session — the
+   * full browser jar, not just the provider's declared token sources.
+   *
+   * Providers routinely need companion cookies they do not declare: grok.com
+   * rejects `sso` without `sso-rw` (#3063) and pins `cf_clearance` to the
+   * browser that earned it, while LMArena's session lives in the
+   * `arena-auth-prod-v1.0` / `.1` chunks. Capturing only the declared names
+   * drops those, so the captured session authenticates and is then rejected
+   * upstream.
+   */
+  cookies?: Array<{ name: string; value: string }>;
+  /**
+   * True when the capture came from a browser profile that was already signed
+   * in — the operator did not have to sign in again. The dashboard reports it
+   * as a re-sync rather than a fresh sign-in.
+   */
+  alreadySignedIn?: boolean;
   error?: string;
 }
 
@@ -44,6 +65,97 @@ export function captureConfiguredHeaders(
     if (typeof value === "string" && value.trim()) {
       credentials[source.name] = value.trim();
     }
+  }
+}
+
+/**
+ * The domain whose cookies belong to this provider.
+ *
+ * Prefers the provider's explicit `cookieDomain` override (e.g. Gemini's
+ * `.google.com`, which spans google.com accounts) and falls back to the
+ * hostname of the provider's home URL.
+ */
+export function resolveProviderCookieDomain(config: TokenExtractionConfig): string {
+  if (config.cookieDomain && config.cookieDomain.trim()) return config.cookieDomain.trim();
+  try {
+    return new URL(config.homeUrl).hostname;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Keep only the cookies that belong to the provider's domain.
+ *
+ * Domain matching is by exact host or dot-boundary suffix (never `includes`):
+ * a look-alike host such as `claude.ai.attacker.tld` must never contribute a
+ * cookie to the operator's stored credential.
+ */
+export function filterProviderCookies(
+  cookies: ReadonlyArray<{ name: string; value: string; domain?: string }>,
+  cookieDomain: string
+): Array<{ name: string; value: string }> {
+  if (!cookieDomain) return [];
+  const kept: Array<{ name: string; value: string }> = [];
+  const seen = new Set<string>();
+  for (const cookie of cookies) {
+    if (!cookie || typeof cookie.name !== "string" || !cookie.name.trim()) continue;
+    if (!matchesCookieDomain(cookie.domain, cookieDomain)) continue;
+    const name = cookie.name.trim();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    kept.push({ name, value: typeof cookie.value === "string" ? cookie.value : "" });
+  }
+  return kept;
+}
+
+/** Whether the persistent browser profile (the Proxima-style session store) is enabled. */
+export function isPersistentProfileEnabled(): boolean {
+  const flag = process.env.OMNIROUTE_WEB_SESSION_PROFILE;
+  if (flag === undefined) return true;
+  return flag !== "off" && flag !== "0" && flag !== "false";
+}
+
+/**
+ * Directory holding the persistent browser profile for a provider.
+ *
+ * The profile keeps the operator's live web session between captures, so a
+ * re-sync does not require signing in again — the same model as Proxima's
+ * per-provider Electron session partition.
+ *
+ * It lives under the OmniRoute data directory (not the repo) because it holds
+ * session cookies, and is created with owner-only permissions.
+ */
+export function resolveBrowserProfileDir(providerId: string, dataDir: string): string {
+  // Dots are dropped as well as separators: the profile directory must be a
+  // single, traversal-free path segment under the profile root.
+  const safeProviderId = providerId.replace(/[^a-zA-Z0-9_-]/g, "_") || "provider";
+  return path.join(dataDir, "browser-profiles", safeProviderId);
+}
+
+/**
+ * Delete the saved browser profile for a provider.
+ *
+ * Used when a re-synced session turns out to be expired: the stale profile
+ * would keep the "already signed in" fast path happy, so every later capture
+ * would store the same dead credential again. Removing it makes the next
+ * attempt open a signed-out window.
+ *
+ * @returns true when a profile directory was removed.
+ */
+export function clearBrowserProfile(
+  providerId: string,
+  dataDir: string = resolveDataDir()
+): boolean {
+  const profileDir = resolveBrowserProfileDir(providerId, dataDir);
+  try {
+    if (!fs.existsSync(profileDir)) return false;
+    fs.rmSync(profileDir, { recursive: true, force: true });
+    return true;
+  } catch {
+    // A locked profile directory is not fatal — the next capture simply falls
+    // back to a fresh sign-in.
+    return false;
   }
 }
 
@@ -110,6 +222,9 @@ export class InAppLoginService extends EventEmitter {
     const maxTimeout = timeout || config.pollingConfig.timeout || 300_000;
     const minLoginTime = config.pollingConfig.minLoginTime || 5000;
     const providerId = config.providerId;
+    // Domain whose cookies belong to this provider — the jar we persist is
+    // scoped to it so a third-party cookie is never stored as a credential.
+    const cookieDomain = resolveProviderCookieDomain(config);
 
     // Dynamically import Playwright (it's a heavy dep, only load when needed)
     let playwright: any;
@@ -128,16 +243,51 @@ export class InAppLoginService extends EventEmitter {
 
     // Launch browser
     this.emit("status", { providerId, status: "starting", message: "Launching browser..." });
-    const browser = await playwright.chromium.launch({
-      headless: false, // User must interact with the login page
-    });
+
+    const contextOptions = {
+      viewport: { width: 1280, height: 800 },
+      locale: "en-US",
+    };
+
+    // Prefer a persistent per-provider browser profile so the operator's web
+    // session survives between captures: a re-sync then completes without
+    // another manual sign-in (the same model as Proxima's per-provider
+    // Electron session partition). Fall back to an ephemeral context when the
+    // profile cannot be used.
+    let browser: import("playwright").Browser | null = null;
+    let context: import("playwright").BrowserContext | null = null;
+    if (isPersistentProfileEnabled()) {
+      const profileDir = resolveBrowserProfileDir(providerId, resolveDataDir());
+      try {
+        fs.mkdirSync(profileDir, { recursive: true, mode: 0o700 });
+        const persistentContext: import("playwright").BrowserContext =
+          await playwright.chromium.launchPersistentContext(profileDir, {
+            ...contextOptions,
+            headless: false, // User may need to interact with the login page
+          });
+        context = persistentContext;
+      } catch {
+        this.emit("status", {
+          providerId,
+          status: "starting",
+          message: "Saved browser session unavailable — opening a fresh sign-in window.",
+        });
+        context = null;
+      }
+    }
 
     try {
-      const context = await browser.newContext({
-        viewport: { width: 1280, height: 800 },
-        locale: "en-US",
-      });
-      const page = await context.newPage();
+      if (!context) {
+        const launched: import("playwright").Browser = await playwright.chromium.launch({
+          headless: false, // User must interact with the login page
+        });
+        browser = launched;
+        const ephemeralContext: import("playwright").BrowserContext =
+          await launched.newContext(contextOptions);
+        context = ephemeralContext;
+      }
+      const activeContext: import("playwright").BrowserContext = context;
+      const page = activeContext.pages()[0] ?? (await activeContext.newPage());
       const credentials: Record<string, string> = {};
 
       // Playwright normalizes request header names to lowercase. Capture only
@@ -152,11 +302,31 @@ export class InAppLoginService extends EventEmitter {
           });
       });
 
+      // Detect a session that the persistent profile already holds. When every
+      // declared cookie source is present before the operator touches anything,
+      // the capture is a pure re-sync: no sign-in interaction is required and
+      // the min-login grace period is skipped.
+      const cookieSources = config.tokenSources.filter((source) => source.type === "cookie");
+      const onlyCookieSources =
+        cookieSources.length > 0 && cookieSources.length === config.tokenSources.length;
+      const preexistingCookies = await activeContext.cookies();
+      const alreadySignedIn =
+        onlyCookieSources &&
+        cookieSources.every((source) =>
+          preexistingCookies.some(
+            (cookie: { name: string; domain?: string }) =>
+              cookie.name === source.name &&
+              (!source.domain || matchesCookieDomain(cookie.domain, source.domain))
+          )
+        );
+
       // Navigate to login URL
       this.emit("status", {
         providerId,
         status: "navigating",
-        message: `Loading ${config.loginUrl}`,
+        message: alreadySignedIn
+          ? `Reusing the saved ${config.displayName} session`
+          : `Loading ${config.loginUrl}`,
       });
       await page.goto(config.loginUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
 
@@ -183,15 +353,19 @@ export class InAppLoginService extends EventEmitter {
           });
         }
 
-        // Wait before polling (respect minLoginTime on first iteration)
-        if (Date.now() - startTime < minLoginTime) {
+        // Wait before polling (respect minLoginTime on first iteration).
+        // A re-sync of an already-signed-in profile skips the grace period.
+        if (!alreadySignedIn && Date.now() - startTime < minLoginTime) {
           await sleep(pollInterval);
           continue;
         }
 
         // Gather cookies from browser context
-        const cookies = await context.cookies();
+        const cookies = await activeContext.cookies();
         const tokenSources = config.tokenSources;
+        // The full provider-domain jar, captured alongside the declared token
+        // sources so companion cookies survive the capture.
+        const providerCookies = filterProviderCookies(cookies, cookieDomain);
 
         // Check cookie-based sources
         for (const source of tokenSources) {
@@ -253,7 +427,7 @@ export class InAppLoginService extends EventEmitter {
         const allFound = requiredKeys.every((k) => credentials[k] !== undefined);
 
         if (allFound && Object.keys(credentials).length > 0) {
-          return { success: true, credentials };
+          return { success: true, credentials, cookies: providerCookies, alreadySignedIn };
         }
 
         // Check for success URL pattern
@@ -261,7 +435,7 @@ export class InAppLoginService extends EventEmitter {
           try {
             const currentUrl = page.url();
             if (config.successUrlPattern.test(currentUrl) && Object.keys(credentials).length > 0) {
-              return { success: true, credentials };
+              return { success: true, credentials, cookies: providerCookies, alreadySignedIn };
             }
           } catch {
             // URL access may fail on some pages
@@ -277,7 +451,15 @@ export class InAppLoginService extends EventEmitter {
       this.emit("status", { providerId, status: "error", message });
       return { success: false, error: `Login failed: ${message}` };
     } finally {
-      await browser.close().catch(() => {});
+      // A persistent context owns its browser — closing the context also
+      // flushes the profile back to disk. An ephemeral one needs the browser
+      // closed separately.
+      if (context) {
+        await context.close().catch(() => {});
+      }
+      if (browser) {
+        await browser.close().catch(() => {});
+      }
     }
   }
 

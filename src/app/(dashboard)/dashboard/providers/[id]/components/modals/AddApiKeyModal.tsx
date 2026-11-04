@@ -32,6 +32,7 @@ import {
 import { getWebSessionCredentialRequirement } from "../../webSessionCredentials";
 import { useOpenRouterPresetControl } from "../OpenRouterPresetInput";
 import WebSessionCredentialGuide from "../WebSessionCredentialGuide";
+import WebSessionBrowserSignIn from "../WebSessionBrowserSignIn";
 import HarImportButton from "../HarImportButton";
 import CcCompatibleRequestDefaultsFields from "./CcCompatibleRequestDefaultsFields";
 import { buildAddProviderSpecificData } from "./connectionProviderSpecificData";
@@ -145,6 +146,12 @@ export default function AddApiKeyModal({
   });
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
+  // Session data captured by the browser sign-in flow. Stored alongside the
+  // credential so executors that read `providerSpecificData.cookie` (rather
+  // than `credentials.apiKey`) still authenticate.
+  const [capturedSessionData, setCapturedSessionData] = useState<Record<string, unknown> | null>(
+    null
+  );
   const [validationCapabilities, setValidationCapabilities] = useState<Record<
     string,
     unknown
@@ -168,6 +175,7 @@ export default function AddApiKeyModal({
     }));
     setValidationResult(null);
     setSaveError(null);
+    setCapturedSessionData(null);
   }, [defaultBaseUrl, initialBaseUrl, isOpen, existingConnectionCount]);
   const bulkSupported = supportsBulkApiKey(provider);
   const [mode, setMode] = useState<"single" | "bulk">("single");
@@ -400,6 +408,9 @@ export default function AddApiKeyModal({
       const mergedProviderSpecificData = {
         ...(providerSpecificData || {}),
         ...(validatedProviderSpecificData || {}),
+        // Browser-captured session data wins over anything derived from the
+        // form: it is the credential the operator just signed in with.
+        ...(capturedSessionData || {}),
       };
 
       const encodedCredential = isChatGptWebCodex
@@ -766,6 +777,20 @@ export default function AddApiKeyModal({
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder={isQoder ? t("personalAccessTokenLabel") : t("productionKey")}
             />
+            {provider && (
+              <WebSessionBrowserSignIn
+                provider={provider}
+                providerName={providerDisplayName}
+                mode="add"
+                t={t}
+                onCaptured={(session) => {
+                  setFormData((current) => ({ ...current, apiKey: session.credential }));
+                  setCapturedSessionData(session.providerSpecificData);
+                  setValidationResult(null);
+                  setSaveError(null);
+                }}
+              />
+            )}
             {webSessionCredential && (
               <WebSessionCredentialGuide
                 requirement={webSessionCredential}
