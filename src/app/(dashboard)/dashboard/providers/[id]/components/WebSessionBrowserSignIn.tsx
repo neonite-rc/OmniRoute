@@ -21,6 +21,7 @@ import { useState } from "react";
 import Button from "@/shared/components/Button";
 import { getExtractionConfig } from "@omniroute/open-sse/services/tokenExtractionConfig.ts";
 import { providerText, type ProviderMessageTranslator } from "../providerPageHelpers";
+import { requiresWebSessionCredential } from "../webSessionCredentials";
 
 export interface WebSessionCapturedSession {
   /** The canonical credential string (Cookie header or bare token). */
@@ -64,13 +65,20 @@ const DEDICATED_FLOW_PROVIDERS = new Set([
 /**
  * Whether the generic browser sign-in is offered for a provider.
  *
- * Requires an extraction config (the login URL + the token sources to look
- * for). A provider without one has no known login flow, so the button stays
- * hidden and the manual paste remains the only option.
+ * Requires a token-extraction config (the login URL + the token sources to look
+ * for) AND a web-session credential requirement (the provider really does
+ * authenticate with a browser session). The second condition matters: an
+ * extraction config alone is not enough — `veoaifree-web` has one but is a
+ * video provider that uses an API key, and capturing a cookie for it would
+ * store the wrong credential.
+ *
+ * A provider without a known login flow has no button, and the manual paste
+ * remains the only option.
  */
 export function supportsBrowserSignIn(providerId: string): boolean {
   if (!providerId) return false;
   if (DEDICATED_FLOW_PROVIDERS.has(providerId)) return false;
+  if (!requiresWebSessionCredential(providerId)) return false;
   return !!getExtractionConfig(providerId);
 }
 

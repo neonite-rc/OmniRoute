@@ -51,6 +51,14 @@ describe("supportsBrowserSignIn", () => {
     expect(supportsBrowserSignIn("maxai")).toBe(false);
     expect(supportsBrowserSignIn("conol-web")).toBe(false);
   });
+
+  it("is hidden for a provider that has an extraction config but uses an API key", () => {
+    // veoaifree-web is a video provider. It has a token-extraction config, but
+    // it authenticates with an API key — capturing a cookie for it would store
+    // the wrong credential.
+    expect(supportsBrowserSignIn("veoaifree-web")).toBe(false);
+    expect(supportsBrowserSignIn("volcengine-console")).toBe(false);
+  });
 });
 
 describe("WebSessionBrowserSignIn", () => {
