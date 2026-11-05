@@ -32,6 +32,7 @@ import {
 import { getWebSessionCredentialRequirement } from "../../webSessionCredentials";
 import { useOpenRouterPresetControl } from "../OpenRouterPresetInput";
 import WebSessionCredentialGuide from "../WebSessionCredentialGuide";
+import WebSessionBrowserSignIn, { supportsBrowserSignIn } from "../WebSessionBrowserSignIn";
 import HarImportButton from "../HarImportButton";
 import CcCompatibleRequestDefaultsFields from "./CcCompatibleRequestDefaultsFields";
 import { buildAddProviderSpecificData } from "./connectionProviderSpecificData";
@@ -145,6 +146,12 @@ export default function AddApiKeyModal({
   });
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
+  // Session data captured by the browser sign-in flow. Stored alongside the
+  // credential so executors that read `providerSpecificData.cookie` (rather
+  // than `credentials.apiKey`) still authenticate.
+  const [capturedSessionData, setCapturedSessionData] = useState<Record<string, unknown> | null>(
+    null
+  );
   const [validationCapabilities, setValidationCapabilities] = useState<Record<
     string,
     unknown
@@ -168,6 +175,7 @@ export default function AddApiKeyModal({
     }));
     setValidationResult(null);
     setSaveError(null);
+    setCapturedSessionData(null);
   }, [defaultBaseUrl, initialBaseUrl, isOpen, existingConnectionCount]);
   const bulkSupported = supportsBulkApiKey(provider);
   const [mode, setMode] = useState<"single" | "bulk">("single");
@@ -294,8 +302,11 @@ export default function AddApiKeyModal({
     }
   };
 
-  const handleSubmit = async () => {
-    const credentialInput = resolveCredentialInput();
+  const handleSubmit = async (captured?: {
+    credential: string;
+    providerSpecificData?: Record<string, unknown>;
+  }) => {
+    const credentialInput = captured?.credential ?? resolveCredentialInput();
     if (
       !provider ||
       (!isCompatible && !apiKeyOptional && !credentialInput) ||
@@ -325,7 +336,14 @@ export default function AddApiKeyModal({
       let validationError: string | null = null;
       let isUnsupported = false; // #5565/#5567: no live validator → save anyway
       let validatedProviderSpecificData: Record<string, unknown> | undefined;
-      if (!isValid) {
+      if (captured) {
+        // A browser-captured session comes from a live, signed-in browser, so
+        // the credential is valid by construction — and the web-cookie
+        // validator contributes no provider-specific data. Skipping the probe
+        // keeps the connect instant and removes the trap where an
+        // unreachable provider swallows a perfectly good capture.
+        isValid = true;
+      } else if (!isValid) {
         try {
           setValidating(true);
           setValidationResult(null);
@@ -400,6 +418,9 @@ export default function AddApiKeyModal({
       const mergedProviderSpecificData = {
         ...(providerSpecificData || {}),
         ...(validatedProviderSpecificData || {}),
+        // Browser-captured session data wins over anything derived from the
+        // form: it is the credential the operator just signed in with.
+        ...(captured?.providerSpecificData || capturedSessionData || {}),
       };
 
       const encodedCredential = isChatGptWebCodex
@@ -766,12 +787,40 @@ export default function AddApiKeyModal({
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder={isQoder ? t("personalAccessTokenLabel") : t("productionKey")}
             />
+            {provider && (
+              <WebSessionBrowserSignIn
+                provider={provider}
+                providerName={providerDisplayName}
+                mode="add"
+                t={t}
+                onCaptured={async (session) => {
+                  // Keep the captured credential in the form as well: if the
+                  // automatic save fails, the operator still has it and can
+                  // retry from the form.
+                  setFormData((current) => ({ ...current, apiKey: session.credential }));
+                  setCapturedSessionData(session.providerSpecificData);
+                  setValidationResult(null);
+                  setSaveError(null);
+
+                  // One-step connect: create the connection right away, the
+                  // same way the OAuth flow does. The operator signed in —
+                  // making them find the credential field and press Save is
+                  // the one step that separates this from a plain
+                  // "open the provider, sign in, done".
+                  await handleSubmit({
+                    credential: session.credential,
+                    providerSpecificData: session.providerSpecificData,
+                  });
+                }}
+              />
+            )}
             {webSessionCredential && (
               <WebSessionCredentialGuide
                 requirement={webSessionCredential}
                 providerName={providerDisplayName}
                 providerWebsite={providerWebsite}
                 t={t}
+                collapsible={!!provider && supportsBrowserSignIn(provider)}
               />
             )}
             {provider && (

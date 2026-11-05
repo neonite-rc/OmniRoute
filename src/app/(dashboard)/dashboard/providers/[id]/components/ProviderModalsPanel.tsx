@@ -364,6 +364,7 @@ export default function ProviderModalsPanel({
           providerWebsite={providerInfo.website}
           onSave={handleUpdateConnection}
           onResyncModels={(id) => handleCompatibleImportWithProgress(id, "sync")}
+          onSessionSynced={() => void fetchConnections()}
           onClose={() => setShowEditModal(false)}
         />
       )}

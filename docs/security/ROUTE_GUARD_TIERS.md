@@ -71,6 +71,7 @@ spawn-capable prefixes and fails CI if any is not classified local-only.
 | `/api/resilience/connections`, `/dashboard/resilience/connections`   | Connection maintenance actions that can touch local CLI state                            |
 | `/api/providers/cursor/agent-availability`                           | Dashboard install-nudge check — spawns `cursor-agent status --format json`               |
 | `/api/providers/{id}/login` (regex)                                  | Launches a headful Playwright Chromium for web-cookie login                              |
+| `/api/providers/web-session-login` (regex)                           | Browser sign-in capture for web-session providers (add-connection variant — spawns Playwright) |
 | `/api/providers/volcengine-plan/connect` (regex)                     | Manual headful flow + session-based phone/SMS auto-login (spawns Playwright)             |
 | `/api/providers/{id}/refresh-cursor` (regex)                         | Manual Cursor session renewal — nudges `cursor-agent`                                    |
 | `/api/providers/{id}/chatgpt-web-codex-doctor` (regex)               | Diagnoses the local Codex CLI install (spawns the binary)                                |

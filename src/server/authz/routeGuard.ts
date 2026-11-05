@@ -101,6 +101,7 @@ export const LOCAL_ONLY_API_PREFIXES: ReadonlyArray<string> = [
 export const LOCAL_ONLY_API_PATTERNS: ReadonlyArray<RegExp> = [
   /^\/api\/providers\/[^/]+\/login\/?$/,
   /^\/api\/providers\/volcengine-plan\/connect(\/.*)?$/, // manual headful flow + session-based phone/SMS auto-login (both spawn Playwright)
+  /^\/api\/providers\/web-session-login\/?$/, // browser sign-in capture (add-connection variant of the /login route) — spawns a headful Chromium
   /^\/api\/providers\/[^/]+\/refresh-cursor\/?$/,
   /^\/api\/providers\/[^/]+\/chatgpt-web-codex-doctor\/?$/,
 ];
