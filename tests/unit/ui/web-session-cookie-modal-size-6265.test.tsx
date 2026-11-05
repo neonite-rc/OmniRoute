@@ -72,6 +72,15 @@ describe("AddApiKeyModal — cookie modal sizing (#6265)", () => {
 
     // Sanity: the cookie helper text and Save button are both present in the DOM
     // (this modal renders the full guide + form Save/Cancel inline in the body).
+    // The guide sits behind a "Manual paste" disclosure when the one-click
+    // browser sign-in is available — expand it and the full guide is inline.
+    const disclosure = Array.from(el.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Manual paste")
+    );
+    expect(disclosure).toBeTruthy();
+    act(() => {
+      disclosure?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
     expect(el.textContent).toContain("How to get the session credential");
     const saveBtn = Array.from(el.querySelectorAll("button")).find(
       (b) => b.textContent?.trim() === "save"

@@ -11144,6 +11144,15 @@ paths:
       responses:
         "200":
           description: OK
+  /api/providers/web-session-login:
+    post:
+      tags:
+        - Providers
+      summary: "POST providers › web session login"
+      x-loopback-only: true
+      responses:
+        "200":
+          description: OK
   /api/providers/zed/discover:
     post:
       tags:

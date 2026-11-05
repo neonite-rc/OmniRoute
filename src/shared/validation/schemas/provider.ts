@@ -248,6 +248,22 @@ export const bulkWebSessionImportSchema = z.object({
   globalPriority: z.number().int().min(1).max(100).nullable().optional(),
 });
 
+// ──── Web-Session Browser Sign-In Schema ────
+
+/**
+ * Body of `POST /api/providers/web-session-login` — the capture-only variant
+ * used while ADDING a connection (there is no connection id yet, so the
+ * captured credential is returned to the dashboard instead of being persisted).
+ *
+ * `timeout` is bounded by `clampLoginTimeoutMs()` at the route layer; it is
+ * declared as a finite number here so a non-numeric value is rejected up front
+ * rather than silently treated as "use the default".
+ */
+export const webSessionLoginSchema = z.object({
+  provider: z.string().trim().min(1, "provider is required").max(120),
+  timeout: z.number().finite().optional(),
+});
+
 export const providerModelMutationSchema = z.object({
   provider: z.string().trim().min(1, "provider is required").max(120),
   modelId: z.string().trim().min(1, "modelId is required").max(240),
@@ -519,9 +535,7 @@ export const updateProviderConnectionSchema = z
     errorCode: z.union([z.string(), z.null()]).optional(),
     rateLimitedUntil: z.union([z.string(), z.null()]).optional(),
     lastTested: z.union([z.string(), z.null()]).optional(),
-    healthCheckInterval: z
-      .union([z.null(), z.coerce.number().int().min(0).max(1440)])
-      .optional(),
+    healthCheckInterval: z.union([z.null(), z.coerce.number().int().min(0).max(1440)]).optional(),
     group: z.union([z.string().max(100), z.null()]).optional(),
     maxConcurrent: z.union([z.null(), z.coerce.number().int().min(0)]).optional(),
     // Per-window quota cutoffs. Map keys are window names (e.g. "window5h",

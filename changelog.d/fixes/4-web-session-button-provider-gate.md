@@ -1,0 +1,1 @@
+- **fix(providers):** only offer "Sign in with browser" to providers that actually authenticate with a web session — a token-extraction config alone was enough, so a video provider that uses an API key (`veoaifree-web`) could show the button and store a cookie as its API key ([#4](https://github.com/neonite-rc/OmniRoute/pull/4))

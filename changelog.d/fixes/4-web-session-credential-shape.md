@@ -1,0 +1,1 @@
+- **fix(providers):** store captured web-session credentials in the shape the executors read — the generic login path persisted `apiKey = JSON.stringify(credentials)`, which no executor could parse, so a successful browser capture authenticated with nothing ([#4](https://github.com/neonite-rc/OmniRoute/pull/4))

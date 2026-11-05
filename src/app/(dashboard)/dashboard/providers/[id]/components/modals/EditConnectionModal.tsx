@@ -50,6 +50,7 @@ import {
 import { getWebSessionCredentialRequirement } from "../../webSessionCredentials";
 import { useOpenRouterPresetControl } from "../OpenRouterPresetInput";
 import WebSessionCredentialGuide from "../WebSessionCredentialGuide";
+import WebSessionBrowserSignIn, { supportsBrowserSignIn } from "../WebSessionBrowserSignIn";
 import HarImportButton from "../HarImportButton";
 import CcCompatibleRequestDefaultsFields from "./CcCompatibleRequestDefaultsFields";
 import { CodexConnectionFields } from "./CodexFingerprintFields";
@@ -89,6 +90,8 @@ export interface EditConnectionModalProps {
   onSave: (data: unknown) => Promise<void | unknown>;
   /** Triggered after a successful save when the "import only free models" flag changed. */
   onResyncModels?: (connectionId: string) => void | Promise<void>;
+  /** Triggered after the browser sign-in flow re-synced the session server-side. */
+  onSessionSynced?: () => void | Promise<void>;
   onClose: () => void;
 }
 const stringField = (value: unknown) => (typeof value === "string" ? value : "");
@@ -99,6 +102,7 @@ export default function EditConnectionModal({
   providerWebsite,
   onSave,
   onResyncModels,
+  onSessionSynced,
   onClose,
 }: EditConnectionModalProps) {
   const t = useTranslations("providers");
@@ -810,6 +814,31 @@ export default function EditConnectionModal({
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder={isOAuth ? t("accountName") : t("productionKey")}
         />
+        {/* Re-sync sits at the very top: for a web-session provider it is the
+            primary maintenance action, and burying it under a long settings
+            form made it undiscoverable. */}
+        {!isOAuth && provider && (
+          <WebSessionBrowserSignIn
+            provider={provider}
+            providerName={providerDisplayName}
+            mode="sync"
+            connectionId={connection?.id}
+            t={t}
+            onSynced={async ({ alreadySignedIn }) => {
+              notify.success(
+                alreadySignedIn
+                  ? providerText(
+                      t,
+                      "webSessionResyncDoneAlready",
+                      "Session refreshed from the saved browser profile."
+                    )
+                  : providerText(t, "webSessionResyncDone", "Session captured and saved.")
+              );
+              await onSessionSynced?.();
+              onClose();
+            }}
+          />
+        )}
         <Input
           label={t("tagGroupLabel")}
           value={formData.tag}
@@ -991,6 +1020,7 @@ export default function EditConnectionModal({
                 providerName={providerDisplayName}
                 providerWebsite={providerWebsite}
                 t={t}
+                collapsible={!!provider && supportsBrowserSignIn(provider)}
               />
             )}
             {provider && (

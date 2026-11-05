@@ -1,0 +1,1 @@
+- **fix(providers):** report a browser sign-in launch failure in plain language instead of dumping Playwright's browser command line and call log into the dashboard; a headless OmniRoute host now explains that no display is available and how to fix it ([#4](https://github.com/neonite-rc/OmniRoute/pull/4))

@@ -9,6 +9,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedProviderConnectionById } from "@/lib/db/readCache";
 import { updateProviderConnection } from "@/lib/db/providers";
+import { parseProviderSpecificData } from "@/lib/db/webSessionDedup";
+import { buildWebSessionCredentialPayload } from "@/lib/providers/webSessionCredentialPayload";
 import { requireManagementAuth } from "@/lib/api/requireManagementAuth";
 import { clampLoginTimeoutMs } from "@/lib/api/loginTimeout";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error.ts";
@@ -174,9 +176,8 @@ async function loginMaxaiEmail(
   body: { step?: unknown; email?: unknown; code?: unknown }
 ): Promise<NextResponse> {
   const { randomUUID } = await import("node:crypto");
-  const { requestMaxaiEmailCode, verifyMaxaiEmailCode } = await import(
-    "@omniroute/open-sse/executors/maxai/emailLogin.ts"
-  );
+  const { requestMaxaiEmailCode, verifyMaxaiEmailCode } =
+    await import("@omniroute/open-sse/executors/maxai/emailLogin.ts");
 
   const psd = (connection.providerSpecificData ?? {}) as Record<string, unknown>;
   const step = String(body.step || "request");
@@ -309,11 +310,15 @@ export async function POST(
   // {step:"request",email} emails a code; {step:"verify",code} mints + persists.
   if (providerSlug === "maxai" || providerSlug === "mx") {
     try {
-      return await loginMaxaiEmail(id, provider as Record<string, unknown>, body as {
-        step?: unknown;
-        email?: unknown;
-        code?: unknown;
-      });
+      return await loginMaxaiEmail(
+        id,
+        provider as Record<string, unknown>,
+        body as {
+          step?: unknown;
+          email?: unknown;
+          code?: unknown;
+        }
+      );
     } catch (err) {
       const msg = sanitizeErrorMessage(err instanceof Error ? err.message : err);
       return NextResponse.json(
@@ -387,18 +392,78 @@ export async function POST(
     });
 
     // Persist credentials if extraction succeeded
-    if (result.success && result.credentials) {
+    if (result.success) {
+      if (!result.credentials) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "The browser session did not yield a usable credential. Sign in again and retry.",
+          },
+          { status: 400 }
+        );
+      }
+
+      // Build the canonical payload the executors actually read. Storing the
+      // raw extraction map instead (apiKey = JSON.stringify(credentials)) made
+      // a successful capture unusable: perplexity-web and grok-web read
+      // `credentials.apiKey` as a Cookie header, and claude-web reads
+      // `providerSpecificData.cookie` — neither can parse a JSON blob.
+      const payload = buildWebSessionCredentialPayload({
+        providerId: providerSlug || id,
+        extracted: result.credentials,
+        cookies: result.cookies,
+      });
+
+      if (!payload.credential) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "The browser session did not yield a usable credential for this provider. Sign in again and retry.",
+          },
+          { status: 400 }
+        );
+      }
+
+      // A re-sync that reused the saved browser profile can hand back a
+      // session the provider has since invalidated. Probe it before storing it,
+      // and drop the stale profile so the next attempt asks for a real sign-in
+      // instead of re-storing the same dead credential.
+      if (result.alreadySignedIn) {
+        const { capturedSessionProbe } = await import("@/lib/providers/webSessionCapture");
+        const validation = await capturedSessionProbe.validate(providerSlug || id, payload);
+        if (validation.expired) {
+          const { clearBrowserProfile } =
+            await import("@omniroute/open-sse/services/inAppLoginService.ts");
+          clearBrowserProfile(providerSlug || id);
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "The saved browser session for this provider has expired. Run the sign-in again to refresh it.",
+            },
+            { status: 400 }
+          );
+        }
+      }
+
       try {
-        const credentialsStr = JSON.stringify(result.credentials);
+        // Merge into the existing providerSpecificData: the captured session
+        // must not wipe settings the operator configured on this connection
+        // (custom user agent, proxy, quota thresholds, ...).
+        const existing = parseProviderSpecificData(
+          (provider as Record<string, unknown>).providerSpecificData
+        );
         await updateProviderConnection(id, {
-          apiKey: credentialsStr,
-          providerSpecificData: result.credentials,
+          apiKey: payload.apiKey,
+          providerSpecificData: { ...(existing ?? {}), ...payload.providerSpecificData },
         });
 
         return NextResponse.json({
           success: true,
-          credentials: result.credentials,
           persisted: true,
+          alreadySignedIn: result.alreadySignedIn === true,
         });
       } catch (err) {
         // Hard Rule #12: never put raw err.message/stack in a response body.
@@ -410,9 +475,17 @@ export async function POST(
       }
     }
 
-    return NextResponse.json(result, {
-      status: result.success ? 200 : 400,
-    });
+    // Never echo the raw result: on a failure it can still carry the captured
+    // cookie jar, which must not leave the server in a response body.
+    return NextResponse.json(
+      {
+        success: false,
+        // Hard Rule #12: the service's own error may still carry a raw
+        // browser/Playwright dump — never ship it to the dashboard as-is.
+        error: sanitizeErrorMessage(result.error) || "Login failed",
+      },
+      { status: 400 }
+    );
   } catch (err) {
     // Hard Rule #12: never put raw err.message/stack in a response body.
     const msg = sanitizeErrorMessage(err instanceof Error ? err.message : err);

@@ -4,6 +4,7 @@
 // Shared by AddApiKeyModal and EditConnectionModal; imports only leaf modules
 // (no cycle risk).
 
+import { useState } from "react";
 import type { WebSessionCredentialRequirement } from "../webSessionCredentials";
 import { providerText, type ProviderMessageTranslator } from "../providerPageHelpers";
 
@@ -12,6 +13,14 @@ export interface WebSessionCredentialGuideProps {
   providerName: string;
   providerWebsite?: string;
   t: ProviderMessageTranslator;
+  /**
+   * Hide the manual instructions behind a disclosure, collapsed by default.
+   *
+   * Used when the one-click browser sign-in is available: copying a cookie
+   * out of DevTools is the fallback, not the main route, and a four-step
+   * instruction block would otherwise dominate the dialog.
+   */
+  collapsible?: boolean;
 }
 
 export function getProviderWebsiteHost(providerWebsite?: string): string | null {
@@ -31,8 +40,32 @@ export default function WebSessionCredentialGuide({
   providerName,
   providerWebsite,
   t,
+  collapsible = false,
 }: WebSessionCredentialGuideProps) {
   const providerWebsiteHost = getProviderWebsiteHost(providerWebsite);
+  const [manuallyExpanded, setManuallyExpanded] = useState(false);
+  const expanded = !collapsible || manuallyExpanded;
+
+  // Collapsed: a single row that says how to open the manual instructions.
+  if (collapsible && !expanded && requirement.kind !== "none") {
+    return (
+      <button
+        type="button"
+        onClick={() => setManuallyExpanded(true)}
+        className="flex w-full items-center gap-2 rounded-lg border border-purple-500/25 bg-purple-500/10 px-3 py-2 text-left text-sm text-text-muted transition-colors hover:bg-purple-500/15"
+      >
+        <span className="material-symbols-outlined text-[18px] text-purple-500">cookie</span>
+        <span className="flex-1">
+          {providerText(
+            t,
+            "webSessionManualGuideShow",
+            "Manual paste — how to get the session credential"
+          )}
+        </span>
+        <span className="material-symbols-outlined text-[18px]">expand_more</span>
+      </button>
+    );
+  }
 
   if (requirement.kind === "none") {
     return (
@@ -83,6 +116,18 @@ export default function WebSessionCredentialGuide({
               )}
             </p>
           </div>
+          {collapsible && (
+            <button
+              type="button"
+              onClick={() => setManuallyExpanded(false)}
+              className="inline-flex w-fit items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <span className="material-symbols-outlined text-[14px]" aria-hidden="true">
+                expand_less
+              </span>
+              {providerText(t, "webSessionManualGuideHide", "Hide the manual instructions")}
+            </button>
+          )}
           <p className="font-medium text-text-main">
             {providerText(t, requiredCredentialKey, requiredCredentialFallback, {
               credential: requirement.credentialName,
