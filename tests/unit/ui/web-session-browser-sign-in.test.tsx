@@ -64,6 +64,14 @@ describe("supportsBrowserSignIn", () => {
 describe("WebSessionBrowserSignIn", () => {
   let container: HTMLDivElement | null = null;
   let root: Root | null = null;
+  const originalUserAgent = window.navigator.userAgent;
+
+  function setUserAgent(userAgent: string) {
+    Object.defineProperty(window.navigator, "userAgent", {
+      value: userAgent,
+      configurable: true,
+    });
+  }
 
   afterEach(() => {
     if (root) {
@@ -72,6 +80,7 @@ describe("WebSessionBrowserSignIn", () => {
     }
     container?.remove();
     container = null;
+    setUserAgent(originalUserAgent);
     vi.unstubAllGlobals();
   });
 
@@ -118,10 +127,12 @@ describe("WebSessionBrowserSignIn", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/providers/web-session-login");
-    expect(JSON.parse(String(init.body))).toEqual({ provider: "claude-web" });
+    const captureCall = fetchMock.mock.calls.find(
+      (call) => (call as [string])[0] === "/api/providers/web-session-login"
+    );
+    expect(captureCall).toBeTruthy();
+    const [, init] = captureCall as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({ provider: "claude-web" });
 
     expect(onCaptured).toHaveBeenCalledTimes(1);
     expect(onCaptured.mock.calls[0][0]).toMatchObject({
@@ -129,6 +140,105 @@ describe("WebSessionBrowserSignIn", () => {
       providerSpecificData: { cookie: "sessionKey=abc" },
       alreadySignedIn: false,
     });
+  });
+
+  it("asks for the operator's own browser so the sign-in window opens in it", async () => {
+    // The operator is on Firefox; the window that opens must be Firefox, not
+    // the bundled Chromium that has none of their accounts.
+    setUserAgent(
+      "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0"
+    );
+
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith("/api/providers/web-session-browser")) {
+        return Response.json({
+          browserName: "Firefox",
+          usesRunningBrowser: false,
+          mode: "launched",
+        });
+      }
+      return Response.json({
+        success: true,
+        provider: "claude-web",
+        credential: "sessionKey=abc",
+        providerSpecificData: { cookie: "sessionKey=abc" },
+        alreadySignedIn: false,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rendered = render();
+    container = rendered.container;
+    root = rendered.root;
+
+    await act(async () => {
+      container?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const infoCall = fetchMock.mock.calls.find(
+      (call) => String((call as [string])[0]).startsWith("/api/providers/web-session-browser")
+    );
+    expect(infoCall).toBeTruthy();
+    expect(String((infoCall as [string])[0])).toContain("browser=firefox");
+
+    const captureCall = fetchMock.mock.calls.find(
+      (call) => (call as [string])[0] === "/api/providers/web-session-login"
+    );
+    expect(captureCall).toBeTruthy();
+    const [, init] = captureCall as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      provider: "claude-web",
+      browser: "firefox",
+    });
+  });
+
+  it("names the browser that will open", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith("/api/providers/web-session-browser")) {
+        return Response.json({
+          browserName: "Firefox",
+          usesRunningBrowser: false,
+          mode: "launched",
+        });
+      }
+      return Response.json({ success: true, alreadySignedIn: false });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rendered = render();
+    container = rendered.container;
+    root = rendered.root;
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container?.textContent).toContain("Firefox");
+  });
+
+  it("says when the operator's own running browser is used", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith("/api/providers/web-session-browser")) {
+        return Response.json({
+          browserName: "Google Chrome",
+          usesRunningBrowser: true,
+          mode: "attached",
+        });
+      }
+      return Response.json({ success: true, alreadySignedIn: false });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rendered = render();
+    container = rendered.container;
+    root = rendered.root;
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container?.textContent).toContain("Google Chrome");
+    expect(container?.textContent).toContain("already running");
   });
 
   it("persists onto the connection in sync mode", async () => {
@@ -144,8 +254,14 @@ describe("WebSessionBrowserSignIn", () => {
       container?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/providers/conn-123/login");
+    const loginCall = fetchMock.mock.calls.find(
+      (call) => (call as [string])[0] === "/api/providers/conn-123/login"
+    );
+    expect(loginCall).toBeTruthy();
+    const [, init] = loginCall as [string, RequestInit];
+    // The browser family travels with the request so the sign-in window opens
+    // in the browser the operator is using.
+    expect(JSON.parse(String(init.body))).toMatchObject({ browser: expect.any(String) });
     expect(onSynced).toHaveBeenCalledWith({ alreadySignedIn: true });
   });
 

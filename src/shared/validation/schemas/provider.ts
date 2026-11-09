@@ -258,10 +258,16 @@ export const bulkWebSessionImportSchema = z.object({
  * `timeout` is bounded by `clampLoginTimeoutMs()` at the route layer; it is
  * declared as a finite number here so a non-numeric value is rejected up front
  * rather than silently treated as "use the default".
+ *
+ * `browser` is the browser family the dashboard detected in its own user
+ * agent. The sign-in window then opens in that browser, so the operator signs
+ * in where they already are — their own Firefox, Chrome, Edge or Safari
+ * instead of a foreign Chromium.
  */
 export const webSessionLoginSchema = z.object({
   provider: z.string().trim().min(1, "provider is required").max(120),
   timeout: z.number().finite().optional(),
+  browser: z.enum(["firefox", "chrome", "edge", "safari", "unknown"]).optional(),
 });
 
 export const providerModelMutationSchema = z.object({

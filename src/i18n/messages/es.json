@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "Copie la credencial requerida del propio dominio del proveedor. Para las cookies, copie solo el valor del encabezado Cookie y omita Cookie:.",
     "webSessionGuideStep3Manual": "Ruta manual: abre las herramientas de desarrollo del navegador (F12 → Red), actualiza la página, abre una solicitud autenticada y copia el valor del encabezado Cookie de los Encabezados de Solicitud — omite el prefijo Cookie:.",
     "webSessionGuideStep4": "Pégalo aquí y comprueba la conexión. Si deja de funcionar, inicie sesión nuevamente y reemplácelo con un valor nuevo.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

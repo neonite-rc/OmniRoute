@@ -17,11 +17,12 @@
  * `WebSessionCredentialGuide`.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Button from "@/shared/components/Button";
 import { getExtractionConfig } from "@omniroute/open-sse/services/tokenExtractionConfig.ts";
 import { providerText, type ProviderMessageTranslator } from "../providerPageHelpers";
 import { requiresWebSessionCredential } from "../webSessionCredentials";
+import { detectBrowserFamily, type BrowserFamily } from "@/shared/providers/browserFamily";
 
 export interface WebSessionCapturedSession {
   /** The canonical credential string (Cookie header or bare token). */
@@ -97,6 +98,44 @@ export default function WebSessionBrowserSignIn({
   const [error, setError] = useState<string | null>(null);
   const busy = phase !== "idle";
 
+  // The browser the operator is looking at right now. The sign-in window
+  // opens in that same browser, so they sign in where they already are —
+  // their own Firefox with their accounts, not a foreign Chromium.
+  //
+  // Read once at mount: the user agent does not change while the page is
+  // open, and the server has to be told before the capture starts.
+  const [browserFamily] = useState<BrowserFamily>(() =>
+    typeof navigator === "undefined" ? "unknown" : detectBrowserFamily(navigator.userAgent)
+  );
+  // The browser the OmniRoute host will actually open, and whether it is the
+  // operator's own already-running browser.
+  const [browserInfo, setBrowserInfo] = useState<{ name: string; running: boolean } | null>(null);
+
+  useEffect(() => {
+    // No button means no sign-in window — do not ask the server about it.
+    if (!supportsBrowserSignIn(provider)) return;
+    if (mode === "sync" && !connectionId) return;
+
+    let cancelled = false;
+    const query = browserFamily === "unknown" ? "" : `?browser=${encodeURIComponent(browserFamily)}`;
+    fetch(`/api/providers/web-session-browser${query}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { browserName?: unknown; usesRunningBrowser?: unknown } | null) => {
+        if (cancelled || !data) return;
+        setBrowserInfo({
+          name: typeof data.browserName === "string" ? data.browserName : "",
+          running: data.usesRunningBrowser === true,
+        });
+      })
+      .catch(() => {
+        // The browser name is a nicety — the sign-in still works without it.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, mode, connectionId, browserFamily]);
+
   if (!supportsBrowserSignIn(provider)) return null;
 
   // A re-sync persists straight onto an existing connection. Without a
@@ -116,7 +155,7 @@ export default function WebSessionBrowserSignIn({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(isSync ? {} : { provider }),
+          body: JSON.stringify(isSync ? { browser: browserFamily } : { provider, browser: browserFamily }),
         }
       );
       const data = (await response.json().catch(() => null)) as
@@ -204,6 +243,23 @@ export default function WebSessionBrowserSignIn({
                   { provider: providerName }
                 )}
           </p>
+          {browserInfo?.name && (
+            <p className="mt-1 text-xs opacity-80">
+              {browserInfo.running
+                ? providerText(
+                    t,
+                    "webSessionBrowserRunning",
+                    "Uses the {browser} that is already running — you are signed in there already.",
+                    { browser: browserInfo.name }
+                  )
+                : providerText(
+                    t,
+                    "webSessionBrowserOpens",
+                    "Opens in {browser}.",
+                    { browser: browserInfo.name }
+                  )}
+            </p>
+          )}
         </div>
         <Button size="sm" icon="login" loading={busy} onClick={handleSignIn} disabled={busy}>
           {phase === "saving"

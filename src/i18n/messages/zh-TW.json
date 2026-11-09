@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "從提供者自己的域複製所需的憑據。對於 cookie，僅複製 Cookie 標頭值並省略 Cookie:。",
     "webSessionGuideStep3Manual": "手動路徑：打開瀏覽器開發者工具 (F12 → 網路)，刷新頁面，打開一個經過身份驗證的請求，並從請求標頭中複製 Cookie 標頭值 — 省略 Cookie: 前綴。",
     "webSessionGuideStep4": "將其貼上到此處並檢查連線。如果它停止工作，請重新登入並將其替換為新值。",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

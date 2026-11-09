@@ -11144,6 +11144,27 @@ paths:
       responses:
         "200":
           description: OK
+  /api/providers/web-session-browser:
+    get:
+      tags:
+        - Providers
+      summary: "GET providers › web session browser"
+      parameters:
+        - name: browser
+          in: query
+          required: false
+          description: "Browser family the dashboard detected in its own user agent, so the answer matches the window the operator is looking at."
+          schema:
+            type: string
+            enum:
+              - firefox
+              - chrome
+              - edge
+              - safari
+              - unknown
+      responses:
+        "200":
+          description: OK
   /api/providers/web-session-login:
     post:
       tags:

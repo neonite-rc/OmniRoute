@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "Tələb olunan etimadnaməni provayderin öz domenindən kopyalayın. Kukilər üçün yalnız Kuki başlıq dəyərini kopyalayın və Kuki: buraxın.",
     "webSessionGuideStep3Manual": "Əl ilə yol: brauzerin inkişaf etdirici alətlərini açın (F12 → Şəbəkə), səhifəni yeniləyin, təsdiqlənmiş sorğunu açın və İstək Başlıqlarından Cookie başlıq dəyərini kopyalayın — Cookie: prefiksini atlayın.",
     "webSessionGuideStep4": "Bura yapışdırın və əlaqəni yoxlayın. Əgər işləməyi dayandırarsa, yenidən daxil olun və onu təzə dəyərlə əvəz edin.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",
