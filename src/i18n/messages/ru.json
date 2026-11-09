@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "Скопируйте необходимые учетные данные из собственного домена провайдера. Для файлов cookie скопируйте только значение заголовка Cookie и опустите Cookie:.",
     "webSessionGuideStep3Manual": "Ручной путь: откройте инструменты разработчика браузера (F12 → Сеть), обновите страницу, откройте аутентифицированный запрос и скопируйте значение заголовка Cookie из Заголовков запроса — опустите префикс Cookie:.",
     "webSessionGuideStep4": "Вставьте его сюда и проверьте соединение. Если он перестанет работать, войдите в систему еще раз и замените его новым значением.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

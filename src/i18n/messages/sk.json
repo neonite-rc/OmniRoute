@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "Skopírujte požadované poverenia z vlastnej domény poskytovateľa. V prípade súborov cookie skopírujte iba hodnotu hlavičky súboru cookie a vynechajte súbor cookie:.",
     "webSessionGuideStep3Manual": "Manuálna cesta: otvorte nástroje pre vývojárov prehliadača (F12 → Sieť), obnovte stránku, otvorte autentifikovaný požiadavok a skopírujte hodnotu hlavičky Cookie z hlavičiek požiadavky — vynechajte predponu Cookie:.",
     "webSessionGuideStep4": "Vložte ho sem a skontrolujte pripojenie. Ak prestane fungovať, znova sa prihláste a nahraďte ho novou hodnotou.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

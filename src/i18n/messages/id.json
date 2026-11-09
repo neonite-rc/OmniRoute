@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "Salin kredensial yang diperlukan dari domain penyedia itu sendiri. Untuk cookie, salin hanya nilai header Cookie dan hilangkan Cookie:.",
     "webSessionGuideStep3Manual": "Jalur manual: buka alat pengembang browser (F12 → Jaringan), muat ulang halaman, buka permintaan yang terautentikasi, dan salin nilai header Cookie dari Header Permintaan — hilangkan awalan Cookie:.",
     "webSessionGuideStep4": "Rekatkan di sini dan periksa koneksinya. Jika berhenti berfungsi, masuk lagi dan ganti dengan nilai baru.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

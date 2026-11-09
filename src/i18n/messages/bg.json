@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "Копирайте необходимите идентификационни данни от собствения домейн на доставчика. За бисквитки копирайте само стойността на заглавката на бисквитката и пропуснете Cookie:.",
     "webSessionGuideStep3Manual": "Ръчен път: отворете инструментите за разработчици на браузъра (F12 → Network), обновете страницата, отворете удостоверена заявка и копирайте стойността на заглавката Cookie от заглавките на заявката — пропуснете префикса Cookie:.",
     "webSessionGuideStep4": "Поставете го тук и проверете връзката. Ако спре да работи, влезте отново и го заменете с нова стойност.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

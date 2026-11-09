@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "اعتبار مورد نیاز را از دامنه خود ارائه دهنده کپی کنید. برای کوکی ها، فقط مقدار هدر Cookie را کپی کنید و Cookie: را حذف کنید.",
     "webSessionGuideStep3Manual": "مسیر دستی: ابزارهای توسعه‌دهنده مرورگر را باز کنید (F12 → Network)، صفحه را تازه‌سازی کنید، یک درخواست احراز هویت‌شده را باز کنید و مقدار هدر Cookie را از هدرهای درخواست کپی کنید — پیشوند Cookie: را حذف کنید.",
     "webSessionGuideStep4": "آن را در اینجا قرار دهید و اتصال را بررسی کنید. اگر از کار افتاد، دوباره وارد شوید و آن را با یک مقدار جدید جایگزین کنید.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

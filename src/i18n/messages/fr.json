@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "Copiez les informations d'identification requises à partir du propre domaine du fournisseur. Pour les cookies, copiez uniquement la valeur d'en-tête Cookie et omettez Cookie :.",
     "webSessionGuideStep3Manual": "Chemin manuel : ouvrez les outils de développement du navigateur (F12 → Réseau), actualisez la page, ouvrez une requête authentifiée et copiez la valeur de l'en-tête Cookie depuis les en-têtes de requête — omettez le préfixe Cookie : .",
     "webSessionGuideStep4": "Collez-le ici et vérifiez la connexion. S'il cesse de fonctionner, reconnectez-vous et remplacez-le par une nouvelle valeur.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

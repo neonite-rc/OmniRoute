@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "Kopiér de påkrævede legitimationsoplysninger fra udbyderens eget domæne. For cookies skal du kun kopiere Cookie-headerværdien og udelade Cookie:.",
     "webSessionGuideStep3Manual": "Manuel sti: åbn browserens udviklerværktøjer (F12 → Netværk), opdater siden, åbn en godkendt anmodning, og kopier Cookie-headerens værdi fra anmodningsoverskrifterne — udelad Cookie:-præfikset.",
     "webSessionGuideStep4": "Indsæt det her og kontroller forbindelsen. Hvis det holder op med at fungere, skal du logge ind igen og erstatte det med en ny værdi.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

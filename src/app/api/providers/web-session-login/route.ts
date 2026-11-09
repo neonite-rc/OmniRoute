@@ -74,6 +74,9 @@ export async function POST(request: Request) {
 
     const result = await inAppLoginService.startLogin(provider, {
       timeout: clampLoginTimeoutMs(validation.data.timeout),
+      // The dashboard reports the browser it detected in its own user agent,
+      // so the sign-in window opens in the browser the operator is using.
+      browser: validation.data.browser,
     });
 
     if (!result.success || !result.credentials) {

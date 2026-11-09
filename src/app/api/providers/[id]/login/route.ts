@@ -13,6 +13,7 @@ import { parseProviderSpecificData } from "@/lib/db/webSessionDedup";
 import { buildWebSessionCredentialPayload } from "@/lib/providers/webSessionCredentialPayload";
 import { requireManagementAuth } from "@/lib/api/requireManagementAuth";
 import { clampLoginTimeoutMs } from "@/lib/api/loginTimeout";
+import { normalizeBrowserFamily } from "@/shared/providers/browserFamily";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error.ts";
 
 const ADOBE_FIREFLY_SLUGS = new Set(["adobe-firefly", "firefly"]);
@@ -303,6 +304,7 @@ export async function POST(
   const body = (await req.json().catch(() => ({}))) as {
     timeout?: unknown;
     freshSession?: unknown;
+    browser?: unknown;
   };
   const providerSlug = resolveProviderSlug(provider as Record<string, unknown>);
 
@@ -389,6 +391,9 @@ export async function POST(
 
     const result = await inAppLoginService.startLogin(providerSlug || id, {
       timeout: clampLoginTimeoutMs(body.timeout),
+      // The dashboard reports the browser it detected in its own user agent,
+      // so the sign-in window opens in the browser the operator is using.
+      browser: normalizeBrowserFamily(body.browser),
     });
 
     // Persist credentials if extraction succeeded

@@ -1,7 +1,7 @@
 ---
 title: "Web-session providers — browser sign-in"
 version: 3.8.51
-lastUpdated: 2026-11-04
+lastUpdated: 2026-11-09
 ---
 
 # Web-session providers — browser sign-in
@@ -31,9 +31,56 @@ sign in as usual, and the session is captured and stored.**
 For an existing connection, open **Edit** and click **Re-sync session** — the
 new session is stored directly on the connection, with no copy/paste step.
 
-> **The browser opens on the OmniRoute host**, not in your dashboard tab. On a
-> desktop install that is your own machine. On a remote/server deployment it is
-> the server's display — sign in there, or fall back to pasting the credential.
+> **The browser opens on the OmniRoute host**, not in your dashboard tab — but it
+> is the *same browser* you are using to view the dashboard (see
+> **Which browser opens**). On a desktop install that is your own machine. On a
+> remote/server deployment it is the server's display — sign in there, or fall
+> back to pasting the credential.
+
+---
+
+## Which browser opens
+
+The sign-in window opens in **the browser you are using right now** — the
+dashboard detects it and tells the server, so you sign in where you already
+are:
+
+| You are using | The window that opens |
+| ------------- | --------------------- |
+| Firefox       | Firefox               |
+| Chrome        | Chrome                |
+| Edge          | Edge                  |
+| Safari        | Safari's engine (WebKit) — Safari itself exposes no automation API |
+
+The panel above the button names the browser, so there is never a guess about
+which window to look for.
+
+Two cases go further:
+
+- **Your browser is already running with a remote-debugging endpoint.** OmniRoute
+  attaches to that very browser instead of starting a new one, so the capture
+  uses the accounts you are already signed in with — no password at all. The
+  panel says *"Uses the Firefox that is already running"*. Your own tabs are
+  left alone; only the tab OmniRoute opened is closed afterwards.
+- **No browser preference could be detected** (a script, a terminal client).
+  The host's default browser is used, falling back to the bundled Chromium.
+
+Firefox and Safari cannot be attached to while they are already running —
+Playwright drives its own Firefox build, and Safari exposes no automation API.
+For those, the sign-in uses a dedicated profile per provider, so it is a
+one-time sign-in and every later re-sync is silent.
+
+To turn the attach off:
+
+```bash
+OMNIROUTE_WEB_SESSION_CDP=off
+```
+
+To attach to a browser on a different port:
+
+```bash
+OMNIROUTE_WEB_SESSION_CDP_URL=http://127.0.0.1:9222
+```
 
 ---
 
@@ -47,7 +94,8 @@ new session is stored directly on the connection, with no copy/paste step.
    in the dialog; the manual instructions are collapsed behind a
    **"Manual paste"** row.
 3. Click **Sign in with browser**. A browser window opens at the provider's
-   sign-in page **on the OmniRoute host**.
+   sign-in page **on the OmniRoute host**, in the same browser family the
+   dashboard is running in (see **Which browser opens**).
 4. Sign in. The window closes by itself as soon as the credential appears.
 5. The dashboard is back on the connection list with the new connection in it.
 
@@ -263,6 +311,10 @@ into it — so a failed automatic save can be retried from the form.
 | "The saved browser session for this provider has expired." | The provider rejected the saved session. The stale profile was deleted — sign in again. |
 | The browser window does not appear                    | The OmniRoute host has no display (headless server). Use the manual paste, or run with a virtual display. |
 | The capture succeeds but requests 401                 | The stored value is not the shape the executor reads. Check `provider_specific_data.cookie` (see **Verify what was stored**). |
+| A Firefox window opens when you expected Chrome      | The window follows the browser the **dashboard** is in, not the host's default. Sign in from a Chrome tab if you want Chrome. |
+| The window opens in a browser you do not recognise    | The dashboard's browser could not be identified, so the host's default browser was used. The panel names it — if that is wrong, open the dashboard in your usual browser. |
+| "Executable doesn't exist" when signing in with Firefox | Playwright's Firefox build is not installed on the OmniRoute host. Run `npx playwright install firefox` there. |
+| The window opens in a browser you do not have accounts in | The browser was started fresh with a dedicated profile, so it has none of your accounts. Sign in once — the profile is kept, so later re-syncs need no password. |
 
 ## Related
 

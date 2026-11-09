@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "Skopiuj wymagane dane uwierzytelniające z własnej domeny provider. W przypadku cookies skopiuj tylko wartość nagłówka Cookie i pomiń Cookie:.",
     "webSessionGuideStep3Manual": "Ręczna ścieżka: otwórz narzędzia dewelopera przeglądarki (F12 → Sieć), odśwież stronę, otwórz uwierzytelnione żądanie i skopiuj wartość nagłówka Cookie z nagłówków żądania — pomiń prefiks Cookie:.",
     "webSessionGuideStep4": "Wklej tutaj i sprawdź połączenie. Jeśli przestanie działać, zaloguj się ponownie i zastąp nową wartością.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",

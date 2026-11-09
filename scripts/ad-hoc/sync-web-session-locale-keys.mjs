@@ -39,6 +39,8 @@ const KEYS = [
   "webSessionConnecting",
   "webSessionManualGuideShow",
   "webSessionManualGuideHide",
+  "webSessionBrowserOpens",
+  "webSessionBrowserRunning",
 ];
 
 /**
@@ -65,6 +67,9 @@ const VIETNAMESE = {
   webSessionConnecting: "Đang kết nối…",
   webSessionManualGuideShow: "Dán thủ công — cách lấy thông tin xác thực phiên",
   webSessionManualGuideHide: "Ẩn hướng dẫn thủ công",
+  webSessionBrowserOpens: "Mở trong {browser}.",
+  webSessionBrowserRunning:
+    "Dùng {browser} đang chạy — bạn đã đăng nhập ở đó rồi.",
 };
 
 const en = JSON.parse(await fs.readFile(path.join(MESSAGES, "en.json"), "utf8"));

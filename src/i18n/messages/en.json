@@ -6352,6 +6352,8 @@
     "webSessionConnecting": "Connecting…",
     "webSessionManualGuideShow": "Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "Hide the manual instructions",
+    "webSessionBrowserOpens": "Opens in {browser}.",
+    "webSessionBrowserRunning": "Uses the {browser} that is already running — you are signed in there already.",
     "harImportButtonLabel": "Import .har file",
     "harImportButtonBusy": "Importing…",
     "harImportButtonHint": "Export from DevTools Network tab after sending at least one chat message.",

@@ -22,6 +22,13 @@ import {
 } from "./tokenExtractionConfig";
 import { matchesCookieDomain } from "../utils/cookieDomain";
 import { resolveDataDir } from "@/lib/dataPaths";
+import {
+  resolveBrowserForFamily,
+  resolvePreferredSystemBrowser,
+  type BrowserEngine,
+  type ChromiumChannel,
+} from "./systemBrowser";
+import type { BrowserFamily } from "@/shared/providers/browserFamily";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -199,6 +206,245 @@ export function describeBrowserLaunchFailure(err: unknown): string {
   return `Could not open the sign-in browser: ${firstLine.slice(0, 200)}`;
 }
 
+// ─── Browser selection ──────────────────────────────────────────────────────
+
+/**
+ * How the sign-in browser is obtained.
+ *
+ *  - `attached`: the operator's own browser, already running with a remote
+ *    debugging endpoint. This is the best case — it is the browser they are
+ *    signed into, so the capture needs no password at all.
+ *  - `launched`: a browser we start ourselves, matching the host's default
+ *    browser so the window looks like the one the operator uses.
+ *  - `bundled`: Playwright's bundled Chromium, the last-resort fallback.
+ */
+export type BrowserLaunchMode = "attached" | "launched" | "bundled";
+
+export interface BrowserLaunchInfo {
+  mode: BrowserLaunchMode;
+  /** Name shown in the dashboard, e.g. "Firefox" or "Google Chrome". */
+  browserName: string;
+  /** True when the operator's already-running browser will be used. */
+  usesRunningBrowser: boolean;
+}
+
+/** The browser we would start for the sign-in window. */
+interface BrowserLaunchTarget {
+  browserName: "chromium" | "firefox" | "webkit";
+  /**
+   * The engine of the host's default browser. "unknown" when no default
+   * browser could be identified, in which case any attachable browser is
+   * acceptable.
+   */
+  preferredEngine: BrowserEngine;
+  channel?: ChromiumChannel;
+  executablePath?: string;
+  label: string;
+}
+
+type PlaywrightModule = typeof import("playwright");
+
+/**
+ * The remote-debugging endpoint of a browser that is already running.
+ *
+ * Chrome's default is `http://127.0.0.1:9222`; Firefox's remote agent uses
+ * the same port when asked to. Set `OMNIROUTE_WEB_SESSION_CDP_URL` to point
+ * somewhere else, or `OMNIROUTE_WEB_SESSION_CDP=off` to never attach.
+ */
+function resolveCdpEndpoint(): string | null {
+  const flag = process.env.OMNIROUTE_WEB_SESSION_CDP;
+  if (flag === "off" || flag === "0" || flag === "false") return null;
+  const configured = process.env.OMNIROUTE_WEB_SESSION_CDP_URL?.trim();
+  if (configured) return configured;
+  return "http://127.0.0.1:9222";
+}
+
+/** The engine a CDP endpoint belongs to, from its `/json/version` banner. */
+function detectEngineFromCdpBanner(banner: string): BrowserEngine {
+  const lower = banner.toLowerCase();
+  if (lower.includes("firefox")) return "firefox";
+  if (lower.includes("safari") || lower.includes("webkit")) return "webkit";
+  if (lower.includes("chrome") || lower.includes("chromium") || lower.includes("edg")) {
+    return "chromium";
+  }
+  return "unknown";
+}
+
+/**
+ * Probe the remote-debugging endpoint of a browser that is already running.
+ *
+ * This only performs an HTTP GET — it does not import Playwright — so the
+ * dashboard can ask "which browser will open?" cheaply.
+ */
+async function probeCdpEndpoint(
+  preferredEngine: BrowserEngine
+): Promise<{ endpoint: string; engine: BrowserEngine } | null> {
+  const endpoint = resolveCdpEndpoint();
+  if (!endpoint) return null;
+
+  let banner = "";
+  try {
+    const response = await fetch(`${endpoint.replace(/\/+$/, "")}/json/version`, {
+      signal: AbortSignal.timeout(900),
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { Browser?: unknown };
+    banner = typeof payload.Browser === "string" ? payload.Browser : "";
+  } catch {
+    return null;
+  }
+
+  const engine = detectEngineFromCdpBanner(banner);
+  if (engine === "unknown") return null;
+  // The operator asked for their default browser: quietly attaching a
+  // different one would be more confusing than the extra sign-in.
+  if (preferredEngine !== "unknown" && engine !== preferredEngine) return null;
+  return { endpoint, engine };
+}
+
+/**
+ * Attach to the operator's own running browser, when one is reachable.
+ *
+ * This is the "sign in with the browser I am already using" path: the
+ * browser holds the operator's real accounts, so the capture completes
+ * without them typing a password. It only applies to Chromium-family
+ * browsers — Playwright cannot drive a system Firefox, and Safari exposes no
+ * automation API.
+ */
+async function attachToRunningBrowser(
+  playwright: PlaywrightModule,
+  preferredEngine: BrowserEngine
+): Promise<{
+  browser: import("playwright").Browser;
+  context: import("playwright").BrowserContext;
+} | null> {
+  const probed = await probeCdpEndpoint(preferredEngine);
+  if (!probed) return null;
+
+  try {
+    const browser = await playwright.chromium.connectOverCDP(probed.endpoint);
+    const context = browser.contexts()[0];
+    if (!context) {
+      await browser.close().catch(() => {});
+      return null;
+    }
+    return { browser, context };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The browser to start for the sign-in window.
+ *
+ * The dashboard's hint wins: it knows which browser the operator is looking
+ * at right now, so the sign-in happens where they already are — their own
+ * Firefox, their own Chrome, their own Edge. Safari itself exposes no
+ * automation API, so its engine (WebKit) is used instead.
+ *
+ * Without a hint the host's default browser is used, so an operator who
+ * signs in from a terminal or a script still gets the browser they chose for
+ * the machine.
+ */
+export async function resolveBrowserLaunchTarget(
+  hint?: BrowserFamily
+): Promise<BrowserLaunchTarget> {
+  const requested = hint && hint !== "unknown" ? hint : null;
+
+  if (requested === "firefox") {
+    // Playwright drives its own Firefox build, so the system Firefox does
+    // not have to be installed.
+    return { browserName: "firefox", preferredEngine: "firefox", label: "Firefox" };
+  }
+  if (requested === "safari") {
+    return { browserName: "webkit", preferredEngine: "webkit", label: "Safari (WebKit)" };
+  }
+  if (requested === "chrome" || requested === "edge") {
+    const match = await resolveBrowserForFamily(requested);
+    return {
+      browserName: "chromium",
+      preferredEngine: "chromium",
+      channel: match?.channel,
+      executablePath: match?.executablePath,
+      label: match?.name ?? (requested === "edge" ? "Microsoft Edge" : "Google Chrome"),
+    };
+  }
+
+  const preferred = await resolvePreferredSystemBrowser();
+  const preferredEngine = preferred?.engine ?? "unknown";
+
+  if (preferred?.engine === "firefox") {
+    return { browserName: "firefox", preferredEngine, label: "Firefox" };
+  }
+  if (preferred?.engine === "webkit") {
+    return { browserName: "webkit", preferredEngine, label: "Safari (WebKit)" };
+  }
+  if (preferred?.engine === "chromium") {
+    return {
+      browserName: "chromium",
+      preferredEngine,
+      channel: preferred.channel,
+      executablePath: preferred.executablePath,
+      label: preferred.name,
+    };
+  }
+  return { browserName: "chromium", preferredEngine, label: "Chromium" };
+}
+
+/** Start the chosen browser with a persistent profile. */
+async function launchPersistentContext(
+  playwright: PlaywrightModule,
+  target: BrowserLaunchTarget,
+  profileDir: string,
+  contextOptions: { viewport: { width: number; height: number }; locale: string }
+): Promise<import("playwright").BrowserContext> {
+  if (target.browserName === "firefox") {
+    return playwright.firefox.launchPersistentContext(profileDir, {
+      ...contextOptions,
+      headless: false,
+    });
+  }
+  if (target.browserName === "webkit") {
+    return playwright.webkit.launchPersistentContext(profileDir, {
+      ...contextOptions,
+      headless: false,
+    });
+  }
+
+  const options: import("playwright").LaunchPersistentContextOptions = {
+    ...contextOptions,
+    headless: false,
+  };
+  if (target.channel) options.channel = target.channel;
+  if (target.executablePath) options.executablePath = target.executablePath;
+  return playwright.chromium.launchPersistentContext(profileDir, options);
+}
+
+/**
+ * What the dashboard should tell the operator about the sign-in browser.
+ *
+ * Reported before a capture starts so the operator knows which window to
+ * watch — the whole point of matching the default browser is that they can
+ * find it among their own windows.
+ */
+export async function describeBrowserLaunch(hint?: BrowserFamily): Promise<BrowserLaunchInfo> {
+  const target = await resolveBrowserLaunchTarget(hint);
+  const probed = await probeCdpEndpoint(target.preferredEngine);
+  if (probed) {
+    return {
+      mode: "attached",
+      browserName: target.label,
+      usesRunningBrowser: true,
+    };
+  }
+  return {
+    mode: "launched",
+    browserName: target.label,
+    usesRunningBrowser: false,
+  };
+}
+
+
 // ─── Service ────────────────────────────────────────────────────────────────
 
 export class InAppLoginService extends EventEmitter {
@@ -208,8 +454,13 @@ export class InAppLoginService extends EventEmitter {
    * Start a login flow for a web-cookie provider using Playwright.
    * @param providerId - e.g. "claude-web", "perplexity-web"
    * @param options.timeout - Total timeout in ms (default: config value or 300s)
+   * @param options.browser - The browser family the operator is using, so the
+   *   sign-in window opens in the same browser they are looking at.
    */
-  async startLogin(providerId: string, options?: { timeout?: number }): Promise<LoginResult> {
+  async startLogin(
+    providerId: string,
+    options?: { timeout?: number; browser?: BrowserFamily }
+  ): Promise<LoginResult> {
     const config = TOKEN_EXTRACTION_CONFIGS.get(providerId);
     if (!config) {
       this.emit("status", { providerId, status: "error", message: "No extraction config found" });
@@ -233,7 +484,7 @@ export class InAppLoginService extends EventEmitter {
     });
 
     try {
-      const result = await this.runBrowserLogin(config, options?.timeout);
+      const result = await this.runBrowserLogin(config, options?.timeout, options?.browser);
       this.emit("status", {
         providerId,
         status: result.success ? "complete" : "error",
@@ -256,7 +507,8 @@ export class InAppLoginService extends EventEmitter {
    */
   private async runBrowserLogin(
     config: TokenExtractionConfig,
-    timeout?: number
+    timeout?: number,
+    browserHint?: BrowserFamily
   ): Promise<LoginResult> {
     const pollInterval = config.pollingConfig.pollInterval || 1000;
     const maxTimeout = timeout || config.pollingConfig.timeout || 300_000;
@@ -296,15 +548,40 @@ export class InAppLoginService extends EventEmitter {
     // profile cannot be used.
     let browser: import("playwright").Browser | null = null;
     let context: import("playwright").BrowserContext | null = null;
-    if (isPersistentProfileEnabled()) {
+    // A browser we attached to belongs to the operator — it must survive the
+    // capture. Only the tab we opened is closed.
+    let attachedToRunningBrowser = false;
+    // The tab we opened in the operator's own browser. Closing the CDP
+    // connection only detaches — it leaves the tab behind — so it is closed
+    // explicitly.
+    let openedTab: import("playwright").Page | null = null;
+
+    const target = await resolveBrowserLaunchTarget(browserHint);
+
+    // The operator's own running browser is the best case: it already holds
+    // their accounts, so the capture needs no password at all.
+    const attached = await attachToRunningBrowser(playwright, target.preferredEngine);
+    if (attached) {
+      browser = attached.browser;
+      context = attached.context;
+      attachedToRunningBrowser = true;
+      this.emit("status", {
+        providerId,
+        status: "starting",
+        message: `Using your running ${target.label}`,
+      });
+    }
+
+    if (!context && isPersistentProfileEnabled()) {
       const profileDir = resolveBrowserProfileDir(providerId, resolveDataDir());
       try {
         fs.mkdirSync(profileDir, { recursive: true, mode: 0o700 });
-        const persistentContext: import("playwright").BrowserContext =
-          await playwright.chromium.launchPersistentContext(profileDir, {
-            ...contextOptions,
-            headless: false, // User may need to interact with the login page
-          });
+        const persistentContext = await launchPersistentContext(
+          playwright,
+          target,
+          profileDir,
+          contextOptions
+        );
         context = persistentContext;
       } catch {
         this.emit("status", {
@@ -332,7 +609,13 @@ export class InAppLoginService extends EventEmitter {
         context = ephemeralContext;
       }
       const activeContext: import("playwright").BrowserContext = context;
-      const page = activeContext.pages()[0] ?? (await activeContext.newPage());
+      // In the operator's own browser we MUST open a new tab: reusing
+      // `pages()[0]` would navigate whatever page they had open to the
+      // provider's login page.
+      const page = attachedToRunningBrowser
+        ? await activeContext.newPage()
+        : (activeContext.pages()[0] ?? (await activeContext.newPage()));
+      if (attachedToRunningBrowser) openedTab = page;
       const credentials: Record<string, string> = {};
 
       // Playwright normalizes request header names to lowercase. Capture only
@@ -496,14 +779,27 @@ export class InAppLoginService extends EventEmitter {
       this.emit("status", { providerId, status: "error", message });
       return { success: false, error: `Login failed: ${message}` };
     } finally {
-      // A persistent context owns its browser — closing the context also
-      // flushes the profile back to disk. An ephemeral one needs the browser
-      // closed separately.
-      if (context) {
-        await context.close().catch(() => {});
-      }
-      if (browser) {
-        await browser.close().catch(() => {});
+      if (attachedToRunningBrowser) {
+        // The operator's browser belongs to them. Closing the context would
+        // take their whole session with it; closing the CDP connection only
+        // detaches — so the tab we opened is closed explicitly and their own
+        // windows and tabs are left alone.
+        if (openedTab) {
+          await openedTab.close().catch(() => {});
+        }
+        if (browser) {
+          await browser.close().catch(() => {});
+        }
+      } else {
+        // A persistent context owns its browser — closing the context also
+        // flushes the profile back to disk. An ephemeral one needs the browser
+        // closed separately.
+        if (context) {
+          await context.close().catch(() => {});
+        }
+        if (browser) {
+          await browser.close().catch(() => {});
+        }
       }
     }
   }
