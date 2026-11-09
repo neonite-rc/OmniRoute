@@ -6335,6 +6335,8 @@
     "webSessionGuideStep3": "પ્રદાતાના પોતાના ડોમેનમાંથી જરૂરી ઓળખપત્રની નકલ કરો. કૂકીઝ માટે, ફક્ત કૂકી હેડર મૂલ્યની નકલ કરો અને કૂકીને છોડી દો.",
     "webSessionGuideStep3Manual": "હાથથી માર્ગ: બ્રાઉઝર ડેવલપર ટૂલ્સ ખોલો (F12 → નેટવર્ક), પૃષ્ઠને રિફ્રેશ કરો, એક માન્યતા પ્રાપ્ત વિનંતી ખોલો, અને વિનંતી હેડર્સમાંથી કૂકી હેડર મૂલ્ય નકલ કરો — કૂકી: પૂર્વપ્રતિષ્ઠા છોડી દો.",
     "webSessionGuideStep4": "તેને અહીં પેસ્ટ કરો અને કનેક્શન તપાસો. જો તે કામ કરવાનું બંધ કરે, તો ફરીથી સાઇન ઇન કરો અને તેને નવી કિંમત સાથે બદલો.",
+    "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
+    "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
     "webSessionManualGuideShow": "__MISSING__:Manual paste — how to get the session credential",
     "webSessionManualGuideHide": "__MISSING__:Hide the manual instructions",
