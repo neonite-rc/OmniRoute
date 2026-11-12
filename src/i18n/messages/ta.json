@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "வழங்குநரின் சொந்த டொமைனில் இருந்து தேவையான நற்சான்றிதழை நகலெடுக்கவும். குக்கீகளுக்கு, குக்கீ தலைப்பு மதிப்பை மட்டும் நகலெடுத்து குக்கீ:.",
     "webSessionGuideStep3Manual": "கையேடு பாதை: உலாவி மேம்பாட்டு கருவிகளை திறக்கவும் (F12 → நெட்வொர்க்), பக்கம் புதுப்பிக்கவும், அங்கீகாரம் பெற்ற கோரிக்கையை திறக்கவும், மற்றும் கோரிக்கை தலைப்புகளில் இருந்து குக்கீ தலைப்பு மதிப்பை நகலெடுக்கவும் — குக்கீ: முன்னணி நீக்கவும்.",
     "webSessionGuideStep4": "அதை இங்கே ஒட்டவும் மற்றும் இணைப்பைச் சரிபார்க்கவும். அது வேலை செய்வதை நிறுத்தினால், மீண்டும் உள்நுழைந்து புதிய மதிப்புடன் மாற்றவும்.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

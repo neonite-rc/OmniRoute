@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "공급자의 자체 도메인에서 필수 자격 증명을 복사합니다. 쿠키의 경우 Cookie 헤더 값만 복사하고 Cookie:를 생략하세요.",
     "webSessionGuideStep3Manual": "수동 경로: 브라우저 개발자 도구를 열고 (F12 → 네트워크), 페이지를 새로 고치고, 인증된 요청을 열고, 요청 헤더에서 쿠키 헤더 값을 복사합니다 — Cookie: 접두사는 생략합니다.",
     "webSessionGuideStep4": "여기에 붙여넣고 연결을 확인하세요. 작동이 중지되면 다시 로그인하여 새로운 값으로 바꾸세요.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

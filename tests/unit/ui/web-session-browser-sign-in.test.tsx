@@ -241,6 +241,32 @@ describe("WebSessionBrowserSignIn", () => {
     expect(container?.textContent).toContain("already running");
   });
 
+  it("says the host downloads the browser itself — nothing to install locally", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.startsWith("/api/providers/web-session-browser")) {
+        return Response.json({
+          browserName: "Firefox",
+          usesRunningBrowser: false,
+          mode: "launched",
+          browserBuildReady: false,
+        });
+      }
+      return Response.json({ success: true, alreadySignedIn: false });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rendered = render();
+    container = rendered.container;
+    root = rendered.root;
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container?.textContent).toContain("Firefox");
+    expect(container?.textContent).toContain("nothing to install");
+  });
+
   it("persists onto the connection in sync mode", async () => {
     const fetchMock = vi.fn(async () => Response.json({ success: true, alreadySignedIn: true }));
     vi.stubGlobal("fetch", fetchMock);

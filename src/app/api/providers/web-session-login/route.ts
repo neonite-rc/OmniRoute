@@ -26,6 +26,7 @@ import { clampLoginTimeoutMs } from "@/lib/api/loginTimeout";
 import { buildWebSessionCredentialPayload } from "@/lib/providers/webSessionCredentialPayload";
 import { getWebSessionCredentialRequirement } from "@/shared/providers/webSessionCredentials";
 import { webSessionLoginSchema } from "@/shared/validation/schemas";
+import { resolveBrowserHintForRequest } from "@/lib/api/browserHint";
 import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error.ts";
 
@@ -75,8 +76,10 @@ export async function POST(request: Request) {
     const result = await inAppLoginService.startLogin(provider, {
       timeout: clampLoginTimeoutMs(validation.data.timeout),
       // The dashboard reports the browser it detected in its own user agent,
-      // so the sign-in window opens in the browser the operator is using.
-      browser: validation.data.browser,
+      // so the sign-in window opens in the browser the operator is using —
+      // but only when the dashboard is open on this very host. A dashboard
+      // served to another machine says nothing about what this host can open.
+      browser: resolveBrowserHintForRequest(request, validation.data.browser ?? "unknown"),
     });
 
     if (!result.success || !result.credentials) {

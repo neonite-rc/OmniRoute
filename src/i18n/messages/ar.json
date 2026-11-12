@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "انسخ بيانات الاعتماد المطلوبة من المجال الخاص بالموفر. بالنسبة لملفات تعريف الارتباط، انسخ فقط قيمة رأس ملف تعريف الارتباط واحذف ملف تعريف الارتباط:.",
     "webSessionGuideStep3Manual": "المسار اليدوي: افتح أدوات مطور المتصفح (F12 → الشبكة)، قم بتحديث الصفحة، افتح طلبًا مصادقًا، وانسخ قيمة رأس الكوكي من رؤوس الطلب — احذف بادئة Cookie: .",
     "webSessionGuideStep4": "الصقها هنا وتحقق من الاتصال. إذا توقفت عن العمل، قم بتسجيل الدخول مرة أخرى واستبدلها بقيمة جديدة.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

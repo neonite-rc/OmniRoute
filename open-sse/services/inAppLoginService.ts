@@ -13,6 +13,8 @@
  */
 
 import { EventEmitter } from "events";
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -174,7 +176,7 @@ export function clearBrowserProfile(
  * and the single most common cause — no display on the OmniRoute host — is
  * buried in the middle of it.
  */
-export function describeBrowserLaunchFailure(err: unknown): string {
+export function describeBrowserLaunchFailure(err: unknown, browserName?: string): string {
   const raw = err instanceof Error ? err.message : String(err);
 
   if (/Missing X server|\$DISPLAY|XServer|headless: true/i.test(raw)) {
@@ -185,10 +187,25 @@ export function describeBrowserLaunchFailure(err: unknown): string {
     );
   }
   if (/Executable doesn't exist|please run the following command to download new browsers/i.test(raw)) {
+    // Name the browser that is actually missing: the operator asked for a
+    // specific one, and "install chromium" would be the wrong advice for a
+    // Firefox dashboard.
+    const install =
+      browserName === "firefox"
+        ? "npx playwright install firefox"
+        : browserName === "webkit"
+          ? "npx playwright install webkit"
+          : "npx playwright install chromium";
+    const label =
+      browserName === "firefox"
+        ? "Firefox"
+        : browserName === "webkit"
+          ? "the WebKit build"
+          : "Chromium";
     return (
-      "The Playwright browser is not installed on this host. " +
-      "Run `npx playwright install chromium` on the OmniRoute machine, or paste the " +
-      "session credential manually."
+      `${label} is not installed on this host. ` +
+      `Run \`${install}\` on the OmniRoute machine, or open the dashboard in a ` +
+      `browser this host can run, or paste the session credential manually.`
     );
   }
   if (/EACCES|EPERM|Permission denied/i.test(raw)) {
@@ -209,6 +226,14 @@ export function describeBrowserLaunchFailure(err: unknown): string {
 // ─── Browser selection ──────────────────────────────────────────────────────
 
 /**
+ * How long the host may spend downloading a missing browser build.
+ *
+ * The build is cached in the Playwright browser cache, so this is a one-time
+ * cost per browser family.
+ */
+const BROWSER_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
  * How the sign-in browser is obtained.
  *
  *  - `attached`: the operator's own browser, already running with a remote
@@ -226,10 +251,18 @@ export interface BrowserLaunchInfo {
   browserName: string;
   /** True when the operator's already-running browser will be used. */
   usesRunningBrowser: boolean;
+  /**
+   * True when the browser build is already cached on this host.
+   *
+   * A missing build is not a problem: the host downloads it on the first
+   * sign-in that needs it. The dashboard shows this so nobody expects to
+   * install anything themselves.
+   */
+  browserBuildReady: boolean;
 }
 
 /** The browser we would start for the sign-in window. */
-interface BrowserLaunchTarget {
+export interface BrowserLaunchTarget {
   browserName: "chromium" | "firefox" | "webkit";
   /**
    * The engine of the host's default browser. "unknown" when no default
@@ -392,6 +425,125 @@ export async function resolveBrowserLaunchTarget(
 }
 
 /** Start the chosen browser with a persistent profile. */
+/**
+ * Start a throw-away browser window in the requested family.
+ *
+ * The family is never swapped: a Firefox dashboard gets a Firefox window, a
+ * Chrome dashboard gets Chrome. When the host's own Chrome cannot start, the
+ * bundled Chromium takes over — same family, works everywhere.
+ */
+/**
+ * Is the browser build for this engine already cached on this host?
+ */
+function isBrowserEngineInstalled(
+  playwright: PlaywrightModule,
+  browserName: "chromium" | "firefox" | "webkit"
+): boolean {
+  const engine = browserName === "chromium" ? playwright.chromium : playwright[browserName];
+  if (!engine) return false;
+  try {
+    const executablePath = engine.executablePath();
+    return Boolean(executablePath) && fs.existsSync(executablePath);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Download the browser build for this engine into the host's Playwright
+ * browser cache.
+ */
+async function installBrowserEngine(
+  browserName: "chromium" | "firefox" | "webkit"
+): Promise<boolean> {
+  const cliPath = resolvePlaywrightCliPath();
+  if (!cliPath) return false;
+
+  return new Promise<boolean>((resolve) => {
+    const child = spawn(process.execPath, [cliPath, "install", browserName], {
+      stdio: "ignore",
+      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH },
+    });
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      resolve(false);
+    }, BROWSER_INSTALL_TIMEOUT_MS);
+    child.on("error", () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      resolve(code === 0);
+    });
+  });
+}
+
+/**
+ * Make sure the browser build the sign-in needs is present on this host.
+ *
+ * The browser build is an OmniRoute-side dependency, not the operator's: the
+ * server downloads and caches it (in the Playwright browser cache) the first
+ * time a sign-in needs it, so nobody has to install anything by hand.
+ *
+ * Returns `true` when the engine is ready to launch.
+ */
+async function ensureBrowserEngineInstalled(
+  playwright: PlaywrightModule,
+  browserName: "chromium" | "firefox" | "webkit"
+): Promise<boolean> {
+  if (isBrowserEngineInstalled(playwright, browserName)) return true;
+  return installBrowserEngine(browserName);
+}
+
+/**
+ * The Playwright CLI entry point, used to download a browser build.
+ *
+ * Resolved from the installed package rather than hard-coded, so a bundled or
+ * relocated install still works.
+ */
+function resolvePlaywrightCliPath(): string | null {
+  try {
+    const require = createRequire(import.meta.url);
+    const packageJson = require.resolve("playwright/package.json");
+    const packageDir = path.dirname(packageJson);
+    const cliPath = path.join(packageDir, "cli.js");
+    return fs.existsSync(cliPath) ? cliPath : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function launchEphemeralBrowser(
+  playwright: PlaywrightModule,
+  target: BrowserLaunchTarget
+): Promise<import("playwright").Browser> {
+  const options: import("playwright").LaunchOptions = {
+    headless: false, // User must interact with the login page
+  };
+
+  if (target.browserName === "firefox") {
+    return playwright.firefox.launch(options);
+  }
+  if (target.browserName === "webkit") {
+    return playwright.webkit.launch(options);
+  }
+
+  if (target.channel || target.executablePath) {
+    try {
+      return await playwright.chromium.launch({
+        ...options,
+        ...(target.channel ? { channel: target.channel } : {}),
+        ...(target.executablePath ? { executablePath: target.executablePath } : {}),
+      });
+    } catch {
+      // The host's own Chrome could not start — the bundled Chromium is the
+      // same browser family and is always available.
+    }
+  }
+  return playwright.chromium.launch(options);
+}
+
 async function launchPersistentContext(
   playwright: PlaywrightModule,
   target: BrowserLaunchTarget,
@@ -435,12 +587,27 @@ export async function describeBrowserLaunch(hint?: BrowserFamily): Promise<Brows
       mode: "attached",
       browserName: target.label,
       usesRunningBrowser: true,
+      browserBuildReady: true,
     };
+  }
+  // Is the browser build cached on this host? The host downloads it on
+  // demand, so a missing build is not fatal — but the dashboard says so, so
+  // nobody expects to install anything themselves.
+  let browserBuildReady = true;
+  if (!target.executablePath) {
+    try {
+      const playwright = (await import("playwright")) as PlaywrightModule;
+      browserBuildReady = isBrowserEngineInstalled(playwright, target.browserName);
+    } catch {
+      // Playwright could not be loaded — assume the sign-in will sort it out.
+      browserBuildReady = true;
+    }
   }
   return {
     mode: "launched",
     browserName: target.label,
     usesRunningBrowser: false,
+    browserBuildReady,
   };
 }
 
@@ -558,6 +725,31 @@ export class InAppLoginService extends EventEmitter {
 
     const target = await resolveBrowserLaunchTarget(browserHint);
 
+    // The browser build is an OmniRoute-side dependency: if the family the
+    // operator asked for is not cached on this host yet, the host downloads it
+    // itself. Nobody has to install anything by hand.
+    const needsBundledBuild =
+      target.browserName !== "chromium" || target.executablePath === undefined;
+    if (needsBundledBuild && !isBrowserEngineInstalled(playwright, target.browserName)) {
+      this.emit("status", {
+        providerId,
+        status: "starting",
+        message:
+          `Downloading ${target.label} for the sign-in window ` +
+          `(one-time, the host caches it for later sign-ins)…`,
+      });
+    }
+    if (needsBundledBuild) {
+      const ready = await ensureBrowserEngineInstalled(playwright, target.browserName);
+      if (!ready && target.browserName !== "chromium") {
+        const message =
+          `Could not download the ${target.label} build for the sign-in window. ` +
+          `Check the host's network access and disk space, then try again.`;
+        this.emit("status", { providerId, status: "error", message });
+        return { success: false, error: message };
+      }
+    }
+
     // The operator's own running browser is the best case: it already holds
     // their accounts, so the capture needs no password at all.
     const attached = await attachToRunningBrowser(playwright, target.preferredEngine);
@@ -583,7 +775,16 @@ export class InAppLoginService extends EventEmitter {
           contextOptions
         );
         context = persistentContext;
-      } catch {
+      } catch (err) {
+        // Opening a DIFFERENT browser family would be more confusing than a
+        // clear error: the operator asked for Firefox because that is where
+        // their accounts are — a Chromium window would have none of them and
+        // look like a bug.
+        if (target.browserName !== "chromium") {
+          const message = describeBrowserLaunchFailure(err, target.browserName);
+          this.emit("status", { providerId, status: "error", message });
+          return { success: false, error: message };
+        }
         this.emit("status", {
           providerId,
           status: "starting",
@@ -597,11 +798,9 @@ export class InAppLoginService extends EventEmitter {
       if (!context) {
         let launched: import("playwright").Browser;
         try {
-          launched = await playwright.chromium.launch({
-            headless: false, // User must interact with the login page
-          });
+          launched = await launchEphemeralBrowser(playwright, target);
         } catch (err) {
-          throw new Error(describeBrowserLaunchFailure(err));
+          throw new Error(describeBrowserLaunchFailure(err, target.browserName));
         }
         browser = launched;
         const ephemeralContext: import("playwright").BrowserContext =

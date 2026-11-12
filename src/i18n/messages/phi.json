@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "Kopyahin ang kinakailangang kredensyal mula sa sariling domain ng provider. Para sa cookies, kopyahin lang ang value ng Cookie header at alisin ang Cookie:.",
     "webSessionGuideStep3Manual": "Manwal na landas: buksan ang mga developer tools ng browser (F12 → Network), i-refresh ang pahina, buksan ang isang authenticated na request, at kopyahin ang halaga ng Cookie header mula sa Request Headers — alisin ang prefix na Cookie:.",
     "webSessionGuideStep4": "I-paste ito dito at suriin ang koneksyon. Kung huminto ito sa paggana, mag-sign in muli at palitan ito ng bagong halaga.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

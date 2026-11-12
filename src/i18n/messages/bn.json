@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "প্রদানকারীর নিজস্ব ডোমেন থেকে প্রয়োজনীয় শংসাপত্রটি অনুলিপি করুন। কুকির জন্য, শুধুমাত্র কুকি হেডার মান কপি করুন এবং কুকি বাদ দিন:",
     "webSessionGuideStep3Manual": "ম্যানুয়াল পাথ: ব্রাউজারের ডেভেলপার টুলস খুলুন (F12 → নেটওয়ার্ক), পৃষ্ঠা রিফ্রেশ করুন, একটি প্রমাণীকৃত অনুরোধ খুলুন, এবং অনুরোধের হেডার থেকে কুকি হেডার মান কপি করুন — কুকি: প্রিফিক্সটি বাদ দিন।",
     "webSessionGuideStep4": "এটি এখানে পেস্ট করুন এবং সংযোগ পরীক্ষা করুন। যদি এটি কাজ করা বন্ধ করে দেয়, আবার সাইন ইন করুন এবং একটি নতুন মান দিয়ে প্রতিস্থাপন করুন।",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
