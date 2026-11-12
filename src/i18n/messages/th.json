@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "คัดลอกข้อมูลรับรองที่จำเป็นจากโดเมนของผู้ให้บริการเอง สำหรับคุกกี้ ให้คัดลอกเฉพาะค่าส่วนหัวของคุกกี้และละเว้น Cookie:",
     "webSessionGuideStep3Manual": "เส้นทางแบบแมนนวล: เปิดเครื่องมือพัฒนาเบราว์เซอร์ (F12 → Network), รีเฟรชหน้า, เปิดคำขอที่ได้รับการตรวจสอบสิทธิ์, และคัดลอกค่า Cookie header จาก Request Headers — ไม่รวมคำนำหน้า Cookie:",
     "webSessionGuideStep4": "วางที่นี่และตรวจสอบการเชื่อมต่อ หากหยุดทำงาน ให้ลงชื่อเข้าใช้อีกครั้งและแทนที่ด้วยค่าใหม่",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

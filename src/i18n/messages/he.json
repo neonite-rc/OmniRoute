@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "העתק את האישור הנדרש מהדומיין של הספק עצמו. עבור קובצי Cookie, העתק רק את ערך כותרת ה-Cookie והשמט את Cookie:.",
     "webSessionGuideStep3Manual": "נתיב ידני: פתח את כלי המפתחים של הדפדפן (F12 → Network), רענן את הדף, פתח בקשה מאומתת, והעתק את ערך כותרת ה-Cookie מהכותרות של הבקשה — השאר את הקידומת Cookie: מחוץ.",
     "webSessionGuideStep4": "הדבק אותו כאן ובדוק את החיבור. אם הוא מפסיק לעבוד, היכנס שוב והחלף אותו בערך חדש.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
