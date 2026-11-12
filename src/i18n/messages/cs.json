@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "Zkopírujte požadované přihlašovací údaje z vlastní domény poskytovatele. U souborů cookie zkopírujte pouze hodnotu záhlaví souboru cookie a vynechejte soubor cookie:.",
     "webSessionGuideStep3Manual": "Ruční cesta: otevřete nástroje pro vývojáře prohlížeče (F12 → Síť), obnovte stránku, otevřete ověřený požadavek a zkopírujte hodnotu hlavičky Cookie z hlaviček požadavku — vynechte prefix Cookie:.",
     "webSessionGuideStep4": "Vložte jej sem a zkontrolujte připojení. Pokud přestane fungovat, přihlaste se znovu a nahraďte ji novou hodnotou.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

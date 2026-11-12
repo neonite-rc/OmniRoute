@@ -41,6 +41,7 @@ const KEYS = [
   "webSessionManualGuideHide",
   "webSessionBrowserOpens",
   "webSessionBrowserRunning",
+  "webSessionBrowserDownload",
 ];
 
 /**
@@ -70,6 +71,8 @@ const VIETNAMESE = {
   webSessionBrowserOpens: "Mở trong {browser}.",
   webSessionBrowserRunning:
     "Dùng {browser} đang chạy — bạn đã đăng nhập ở đó rồi.",
+  webSessionBrowserDownload:
+    "Máy chủ OmniRoute sẽ tải nó ở lần đăng nhập đầu tiên — bạn không cần cài đặt gì.",
 };
 
 const en = JSON.parse(await fs.readFile(path.join(MESSAGES, "en.json"), "utf8"));

@@ -1,7 +1,11 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveBrowserLaunchTarget } from "../../../open-sse/services/inAppLoginService.ts";
+import {
+  launchEphemeralBrowser,
+  resolveBrowserLaunchTarget,
+  type BrowserLaunchTarget,
+} from "../../../open-sse/services/inAppLoginService.ts";
 
 // The operator signs in where they already are. The dashboard reports the
 // browser it detected in its own user agent, and the sign-in window opens in
@@ -48,5 +52,66 @@ describe("resolveBrowserLaunchTarget", () => {
     const target = await resolveBrowserLaunchTarget();
     assert.ok(["chromium", "firefox", "webkit"].includes(target.browserName));
     assert.ok(target.label.length > 0);
+  });
+});
+
+// The regression that matters: a Firefox dashboard used to get a Chromium
+// window, because the Firefox launch failed and the failure was swallowed.
+// The family the operator asked for is the family that gets launched.
+describe("launchEphemeralBrowser", () => {
+  function stubPlaywright() {
+    const launched: string[] = [];
+    const engine = (name: string) => ({
+      launch: async () => {
+        launched.push(name);
+        return { engine: name };
+      },
+    });
+    return {
+      launched,
+      module: {
+        chromium: engine("chromium"),
+        firefox: engine("firefox"),
+        webkit: engine("webkit"),
+      },
+    };
+  }
+
+  function target(
+    browserName: BrowserLaunchTarget["browserName"]
+  ): BrowserLaunchTarget {
+    return {
+      browserName,
+      preferredEngine: browserName === "webkit" ? "webkit" : browserName,
+      label: browserName,
+    };
+  }
+
+  test("a Firefox request launches Firefox", async () => {
+    const { launched, module } = stubPlaywright();
+    const browser = await launchEphemeralBrowser(
+      module as unknown as Parameters<typeof launchEphemeralBrowser>[0],
+      target("firefox")
+    );
+    assert.deepEqual(launched, ["firefox"]);
+    assert.equal((browser as unknown as { engine: string }).engine, "firefox");
+  });
+
+  test("a Safari request launches WebKit", async () => {
+    const { launched, module } = stubPlaywright();
+    await launchEphemeralBrowser(
+      module as unknown as Parameters<typeof launchEphemeralBrowser>[0],
+      target("webkit")
+    );
+    assert.deepEqual(launched, ["webkit"]);
+  });
+
+  test("a Chrome request launches Chromium", async () => {
+    const { launched, module } = stubPlaywright();
+    await launchEphemeralBrowser(
+      module as unknown as Parameters<typeof launchEphemeralBrowser>[0],
+      target("chromium")
+    );
+    assert.deepEqual(launched, ["chromium"]);
   });
 });

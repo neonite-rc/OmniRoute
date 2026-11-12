@@ -109,7 +109,11 @@ export default function WebSessionBrowserSignIn({
   );
   // The browser the OmniRoute host will actually open, and whether it is the
   // operator's own already-running browser.
-  const [browserInfo, setBrowserInfo] = useState<{ name: string; running: boolean } | null>(null);
+  const [browserInfo, setBrowserInfo] = useState<{
+    name: string;
+    running: boolean;
+    buildReady: boolean;
+  } | null>(null);
 
   useEffect(() => {
     // No button means no sign-in window — do not ask the server about it.
@@ -120,11 +124,16 @@ export default function WebSessionBrowserSignIn({
     const query = browserFamily === "unknown" ? "" : `?browser=${encodeURIComponent(browserFamily)}`;
     fetch(`/api/providers/web-session-browser${query}`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { browserName?: unknown; usesRunningBrowser?: unknown } | null) => {
+      .then((data: {
+        browserName?: unknown;
+        usesRunningBrowser?: unknown;
+        browserBuildReady?: unknown;
+      } | null) => {
         if (cancelled || !data) return;
         setBrowserInfo({
           name: typeof data.browserName === "string" ? data.browserName : "",
           running: data.usesRunningBrowser === true,
+          buildReady: data.browserBuildReady !== false,
         });
       })
       .catch(() => {
@@ -258,6 +267,17 @@ export default function WebSessionBrowserSignIn({
                     "Opens in {browser}.",
                     { browser: browserInfo.name }
                   )}
+              {!browserInfo.running && !browserInfo.buildReady && (
+                <>
+                  {" "}
+                  {providerText(
+                    t,
+                    "webSessionBrowserDownload",
+                    "The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
+                    { browser: browserInfo.name }
+                  )}
+                </>
+              )}
             </p>
           )}
         </div>

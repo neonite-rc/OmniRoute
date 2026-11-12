@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "Gerekli kimlik bilgilerini sağlayıcının kendi alanından kopyalayın. Çerezler için yalnızca Cookie başlık değerini kopyalayın ve Cookie:'yi çıkartın.",
     "webSessionGuideStep3Manual": "Manuel yol: tarayıcı geliştirici araçlarını açın (F12 → Ağ), sayfayı yenileyin, kimlik doğrulamalı bir isteği açın ve İstek Başlıkları'ndan Cookie başlık değerini kopyalayın — Cookie: ön ekini atlayın.",
     "webSessionGuideStep4": "Buraya yapıştırın ve bağlantıyı kontrol edin. Çalışmayı durdurursa tekrar oturum açın ve yeni bir değerle değiştirin.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

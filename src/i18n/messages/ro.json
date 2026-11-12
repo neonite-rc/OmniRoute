@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "Copiați acreditările necesare din domeniul propriu al furnizorului. Pentru cookie-uri, copiați numai valoarea antetului Cookie și omiteți Cookie:.",
     "webSessionGuideStep3Manual": "Calea manuală: deschideți instrumentele de dezvoltare ale browserului (F12 → Rețea), reîncărcați pagina, deschideți o cerere autentificată și copiați valoarea antetului Cookie din Anteturile cererii — omiteți prefixul Cookie:.",
     "webSessionGuideStep4": "Lipiți-l aici și verificați conexiunea. Dacă nu mai funcționează, conectați-vă din nou și înlocuiți-l cu o valoare nouă.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

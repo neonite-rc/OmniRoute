@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "Salin bukti kelayakan yang diperlukan daripada domain penyedia sendiri. Untuk kuki, salin hanya nilai pengepala Kuki dan tinggalkan Kuki:.",
     "webSessionGuideStep3Manual": "Jalan manual: buka alat pemaju pelayar (F12 → Rangkaian), segarkan halaman, buka permintaan yang telah disahkan, dan salin nilai tajuk Cookie dari Tajuk Permintaan — abaikan awalan Cookie:.",
     "webSessionGuideStep4": "Tampalkannya di sini dan semak sambungannya. Jika ia berhenti berfungsi, log masuk semula dan gantikannya dengan nilai baharu.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

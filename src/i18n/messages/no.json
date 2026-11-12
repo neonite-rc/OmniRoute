@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "Kopier den nødvendige legitimasjonen fra leverandørens eget domene. For informasjonskapsler kopierer du bare informasjonskapseloverskriften og utelat informasjonskapsel:.",
     "webSessionGuideStep3Manual": "Manuell sti: åpne nettleserens utviklerverktøy (F12 → Nettverk), oppdater siden, åpne en autentisert forespørsel, og kopier Cookie-headerverdien fra Forespørselshoder — utelat Cookie:-prefikset.",
     "webSessionGuideStep4": "Lim den inn her og kontroller tilkoblingen. Hvis den slutter å fungere, logger du på igjen og erstatter den med en ny verdi.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

@@ -6335,6 +6335,7 @@
     "webSessionGuideStep3": "प्रदाता के अपने डोमेन से आवश्यक क्रेडेंशियल कॉपी करें। कुकीज़ के लिए, केवल कुकी हेडर मान की प्रतिलिपि बनाएँ और कुकी: को हटा दें।",
     "webSessionGuideStep3Manual": "मैनुअल पथ: ब्राउज़र डेवलपर टूल्स खोलें (F12 → नेटवर्क), पृष्ठ को रिफ्रेश करें, एक प्रमाणित अनुरोध खोलें, और अनुरोध हेडर से कुकी हेडर मान को कॉपी करें — कुकी: प्रीफिक्स को छोड़ दें।",
     "webSessionGuideStep4": "इसे यहां पेस्ट करें और कनेक्शन जांचें। यदि यह काम करना बंद कर देता है, तो दोबारा साइन इन करें और इसे नए मान से बदलें।",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",

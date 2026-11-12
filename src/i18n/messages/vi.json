@@ -6339,6 +6339,7 @@
     "webSessionGuideStep3": "Sao chép thông tin xác thực được yêu cầu từ tên miền riêng của nhà cung cấp. Đối với cookie, chỉ sao chép giá trị tiêu đề Cookie và bỏ qua Cookie:.",
     "webSessionGuideStep3Manual": "Cách thủ công: mở công cụ dành cho nhà phát triển của trình duyệt (F12 → Network), tải lại trang, mở một yêu cầu đã xác thực và sao chép giá trị tiêu đề Cookie trong Request Headers — bỏ tiền tố Cookie:.",
     "webSessionGuideStep4": "Dán vào đây và kiểm tra kết nối. Nếu nó ngừng hoạt động, hãy đăng nhập lại và thay thế bằng một giá trị mới.",
+    "webSessionBrowserDownload": "Máy chủ OmniRoute sẽ tải nó ở lần đăng nhập đầu tiên — bạn không cần cài đặt gì.",
     "webSessionBrowserOpens": "Mở trong {browser}.",
     "webSessionBrowserRunning": "Dùng {browser} đang chạy — bạn đã đăng nhập ở đó rồi.",
     "webSessionConnecting": "Đang kết nối…",

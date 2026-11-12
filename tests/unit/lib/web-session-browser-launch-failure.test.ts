@@ -57,4 +57,23 @@ describe("describeBrowserLaunchFailure", () => {
 
     assert.match(message, /no display/i);
   });
+
+  // The operator asked for a specific browser; telling them to install
+  // Chromium when they are on Firefox sends them down the wrong path.
+  test("names the browser that is actually missing", () => {
+    const missing = new Error(
+      "Executable doesn't exist at /home/user/.cache/ms-playwright/firefox-1538/firefox/firefox"
+    );
+
+    const firefoxMessage = describeBrowserLaunchFailure(missing, "firefox");
+    assert.match(firefoxMessage, /Firefox/);
+    assert.match(firefoxMessage, /npx playwright install firefox/);
+    assert.ok(!/install chromium/.test(firefoxMessage), "must not point at Chromium");
+
+    const webkitMessage = describeBrowserLaunchFailure(missing, "webkit");
+    assert.match(webkitMessage, /npx playwright install webkit/);
+
+    const chromiumMessage = describeBrowserLaunchFailure(missing, "chromium");
+    assert.match(chromiumMessage, /npx playwright install chromium/);
+  });
 });

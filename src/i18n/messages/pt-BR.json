@@ -6339,6 +6339,7 @@
     "webSessionGuideStep3": "Copie a credencial necessária do próprio domínio do provedor. Para cookies, copie apenas o valor do cabeçalho Cookie e omita Cookie:.",
     "webSessionGuideStep3Manual": "Caminho manual: abra as ferramentas do desenvolvedor do navegador (F12 → Network), atualize a página, abra uma requisição autenticada e copie o valor do cabeçalho Cookie em Request Headers — omita o prefixo Cookie:.",
     "webSessionGuideStep4": "Cole aqui e verifique a conexão. Se parar de funcionar, faça login novamente e substitua-o por um novo valor.",
+    "webSessionBrowserDownload": "__MISSING__:The OmniRoute host downloads it on the first sign-in — there is nothing to install on your side.",
     "webSessionBrowserOpens": "__MISSING__:Opens in {browser}.",
     "webSessionBrowserRunning": "__MISSING__:Uses the {browser} that is already running — you are signed in there already.",
     "webSessionConnecting": "__MISSING__:Connecting…",
