@@ -109,8 +109,17 @@ test("resolveProviderCookieDomain falls back to the home URL hostname", () => {
 test("resolveBrowserProfileDir scopes the profile to the provider", () => {
   assert.equal(
     resolveBrowserProfileDir("claude-web", "/data"),
-    "/data/browser-profiles/claude-web"
+    "/data/browser-profiles/claude-web/chromium"
   );
+});
+
+test("resolveBrowserProfileDir keeps each browser engine in its own directory", () => {
+  // Chromium and Firefox write different profile formats — sharing one
+  // directory makes the second browser refuse to start.
+  const chromium = resolveBrowserProfileDir("claude-web", "/data", "chromium");
+  const firefox = resolveBrowserProfileDir("claude-web", "/data", "firefox");
+  assert.notEqual(chromium, firefox);
+  assert.equal(firefox, "/data/browser-profiles/claude-web/firefox");
 });
 
 test("resolveBrowserProfileDir sanitizes the provider id", () => {
