@@ -12,9 +12,12 @@
  * and says nothing about what the host can open. The host's own default
  * browser is used instead.
  *
- * The signal used is the token-stamped socket peer our own server writes
- * (`PEER_IP_HEADER`), which cannot be forged by a client. The Host header is
- * only a fallback for callers that carry no stamp (direct Node calls, tests).
+ * The signal is the authz pipeline's trusted locality verdict
+ * (`AUTHZ_HEADER_PEER_LOCALITY`) and the trusted peer IP it forwards
+ * (`AUTHZ_HEADER_TRUSTED_PEER_IP`). Both are stripped from client input and
+ * re-set by the pipeline from the real TCP peer, so a client cannot forge
+ * them. The Host header is only a fallback for callers that carry no trusted
+ * header at all (direct Node calls, tests).
  *
  * This only steers which browser opens. It never decides an auth or security
  * outcome. The same reasoning is applied by `buildRemoteOAuthHint` for the
@@ -23,9 +26,11 @@
 
 import os from "node:os";
 
-import { PEER_IP_HEADER, VIA_PROXY_HEADER } from "@/server/authz/headers";
-import { resolveStampedPeer, resolveStampedViaProxy } from "@/server/authz/peerStamp";
-import { classifyHostLocality, isLoopbackHost } from "@/server/authz/routeGuard";
+import {
+  AUTHZ_HEADER_PEER_LOCALITY,
+  AUTHZ_HEADER_TRUSTED_PEER_IP,
+} from "@/server/authz/headers";
+import { isLoopbackHost } from "@/server/authz/routeGuard";
 import type { BrowserFamily } from "@/shared/providers/browserFamily";
 
 /**
@@ -33,7 +38,7 @@ import type { BrowserFamily } from "@/shared/providers/browserFamily";
  *
  * A browser on this machine that reaches OmniRoute through the machine's LAN
  * address connects from that same address — so the peer is one of the host's
- * own interfaces, not a loopback one. Both mean "same machine".
+ * own interfaces rather than a loopback one. Both mean "same machine".
  */
 function isHostOwnAddress(ip: string): boolean {
   const interfaces = os.networkInterfaces();
@@ -57,23 +62,20 @@ export function resolveBrowserHintForRequest(
 ): BrowserFamily {
   if (!requested || requested === "unknown") return "unknown";
 
-  // 1. The trusted socket peer, stamped by our own server. This works no
-  //    matter which address the dashboard was opened with.
-  const stampToken = process.env.OMNIROUTE_PEER_STAMP_TOKEN;
-  const peer = resolveStampedPeer(request.headers.get(PEER_IP_HEADER), stampToken);
-  if (peer) {
-    // Behind a reverse proxy the socket peer is the proxy hop, not the
-    // operator's browser — the hint says nothing about this host.
-    if (resolveStampedViaProxy(request.headers.get(VIA_PROXY_HEADER), stampToken)) {
-      return "unknown";
-    }
-    if (classifyHostLocality(peer) === "loopback" || isHostOwnAddress(peer)) {
-      return requested;
-    }
+  // 1. The trusted locality verdict from the authz pipeline.
+  const locality = request.headers.get(AUTHZ_HEADER_PEER_LOCALITY);
+  if (locality) {
+    if (locality === "loopback") return requested;
+    // A same-machine request that went through the machine's own LAN address
+    // arrives from that address — the trusted peer IP tells it apart from a
+    // real remote machine on the same network.
+    const trustedPeerIp = request.headers.get(AUTHZ_HEADER_TRUSTED_PEER_IP);
+    if (trustedPeerIp && isHostOwnAddress(trustedPeerIp)) return requested;
     return "unknown";
   }
 
-  // 2. No stamp: fall back to the Host header (spoofable — a UI hint only).
+  // 2. No trusted verdict (direct Node call, tests): fall back to the Host
+  //    header. Spoofable — a UI hint only, never a security decision.
   const hostHeader = request.headers.get("host");
   if (hostHeader == null) return requested;
   return isLoopbackHost(hostHeader) ? requested : "unknown";
