@@ -399,7 +399,11 @@ export async function resolveBrowserLaunchTarget(
       preferredEngine: "chromium",
       channel: match?.channel,
       executablePath: match?.executablePath,
-      label: match?.name ?? (requested === "edge" ? "Microsoft Edge" : "Google Chrome"),
+      // Name the browser that will really open: the host's own Chrome or Edge
+      // when it is installed, the bundled Chromium otherwise. Claiming
+      // "Google Chrome" on a host without Chrome is the kind of small lie
+      // that sends the operator looking for the wrong window.
+      label: match?.name ?? "Chromium",
     };
   }
 
