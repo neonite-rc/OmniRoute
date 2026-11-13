@@ -1,5 +1,6 @@
-import test, { describe, beforeEach, afterEach } from "node:test";
+import test, { describe } from "node:test";
 import assert from "node:assert/strict";
+import os from "node:os";
 
 import { resolveBrowserHintForRequest } from "../../../src/lib/api/browserHint.ts";
 
@@ -34,50 +35,44 @@ describe("resolveBrowserHintForRequest", () => {
   });
 });
 
-// The stamped socket peer is the trustworthy signal: the browser is on this
-// machine when the connection came from loopback or from one of the host's
-// own addresses (a same-machine request that went through the LAN address).
-describe("resolveBrowserHintForRequest with the stamped peer", () => {
-  const TOKEN = "test-peer-stamp-token";
-  let previousToken: string | undefined;
-
-  beforeEach(() => {
-    previousToken = process.env.OMNIROUTE_PEER_STAMP_TOKEN;
-    process.env.OMNIROUTE_PEER_STAMP_TOKEN = TOKEN;
-  });
-
-  afterEach(() => {
-    if (previousToken === undefined) delete process.env.OMNIROUTE_PEER_STAMP_TOKEN;
-    else process.env.OMNIROUTE_PEER_STAMP_TOKEN = previousToken;
-  });
-
-  function stampedRequest(peer: string, viaProxy = false, host = "omniroute.example.com"): Request {
+// The authz pipeline forwards a trusted locality verdict, computed from the
+// real TCP peer and stripped from client input. It is what route handlers
+// must use — the Host header alone cannot tell "the same machine, reached
+// through its LAN address" from "another machine on the network".
+describe("resolveBrowserHintForRequest with the trusted locality verdict", () => {
+  function trustedRequest(locality: string, peerIp?: string, host = "omniroute.example.com"): Request {
     const headers: Record<string, string> = {
       host,
-      "x-omniroute-peer-ip": `${TOKEN}|${peer}`,
+      "x-omniroute-peer-locality": locality,
     };
-    if (viaProxy) headers["x-omniroute-via-proxy"] = `${TOKEN}|1`;
+    if (peerIp) headers["x-omniroute-trusted-peer-ip"] = peerIp;
     return new Request("http://omniroute.local/api/providers/web-session-login", { headers });
   }
 
   test("honours the hint for a loopback peer, whatever the Host header says", () => {
-    assert.equal(resolveBrowserHintForRequest(stampedRequest("127.0.0.1"), "firefox"), "firefox");
-    assert.equal(resolveBrowserHintForRequest(stampedRequest("::1"), "firefox"), "firefox");
+    assert.equal(resolveBrowserHintForRequest(trustedRequest("loopback"), "firefox"), "firefox");
   });
 
   test("ignores the hint for a peer on another machine", () => {
-    assert.equal(resolveBrowserHintForRequest(stampedRequest("203.0.113.9"), "firefox"), "unknown");
+    assert.equal(resolveBrowserHintForRequest(trustedRequest("remote"), "firefox"), "unknown");
+    assert.equal(resolveBrowserHintForRequest(trustedRequest("lan"), "firefox"), "unknown");
   });
 
-  test("ignores the hint behind a reverse proxy", () => {
-    // The socket peer is the proxy hop, not the operator's browser.
-    assert.equal(resolveBrowserHintForRequest(stampedRequest("127.0.0.1", true), "firefox"), "unknown");
+  test("honours the hint when the peer is one of this host's own addresses", () => {
+    // The browser is on this machine and reached OmniRoute through the
+    // machine's own LAN address.
+    const ownAddress = Object.values(os.networkInterfaces())
+      .flat()
+      .find((entry) => entry && entry.family === "IPv4" && !entry.internal)?.address;
+    if (!ownAddress) return; // no non-loopback interface to test with
+    assert.equal(resolveBrowserHintForRequest(trustedRequest("lan", ownAddress), "firefox"), "firefox");
   });
 
-  test("ignores a forged stamp without the token", () => {
-    const forged = new Request("http://omniroute.local/api/providers/web-session-login", {
-      headers: { host: "omniroute.example.com", "x-omniroute-peer-ip": "wrong-token|127.0.0.1" },
-    });
-    assert.equal(resolveBrowserHintForRequest(forged, "firefox"), "unknown");
+  test("the trusted verdict wins over a loopback Host header", () => {
+    // A remote client that sends a loopback Host must not pass as local.
+    assert.equal(
+      resolveBrowserHintForRequest(trustedRequest("remote", undefined, "localhost:20128"), "firefox"),
+      "unknown"
+    );
   });
 });
