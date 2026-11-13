@@ -134,12 +134,22 @@ export function isPersistentProfileEnabled(): boolean {
  *
  * It lives under the OmniRoute data directory (not the repo) because it holds
  * session cookies, and is created with owner-only permissions.
+ *
+ * The browser engine is part of the path: Chromium and Firefox write
+ * completely different profile formats, and sharing one directory makes the
+ * second browser refuse to start (or start with a corrupt profile). The
+ * operator may sign in from Chrome today and Firefox tomorrow, and each keeps
+ * its own session.
  */
-export function resolveBrowserProfileDir(providerId: string, dataDir: string): string {
+export function resolveBrowserProfileDir(
+  providerId: string,
+  dataDir: string,
+  browserName: "chromium" | "firefox" | "webkit" = "chromium"
+): string {
   // Dots are dropped as well as separators: the profile directory must be a
   // single, traversal-free path segment under the profile root.
   const safeProviderId = providerId.replace(/[^a-zA-Z0-9_-]/g, "_") || "provider";
-  return path.join(dataDir, "browser-profiles", safeProviderId);
+  return path.join(dataDir, "browser-profiles", safeProviderId, browserName);
 }
 
 /**
@@ -150,21 +160,33 @@ export function resolveBrowserProfileDir(providerId: string, dataDir: string): s
  * would store the same dead credential again. Removing it makes the next
  * attempt open a signed-out window.
  *
+ * Every engine's profile for the provider is removed — the session that
+ * expired is not tied to the browser that happened to be used.
+ *
  * @returns true when a profile directory was removed.
  */
 export function clearBrowserProfile(
   providerId: string,
   dataDir: string = resolveDataDir()
 ): boolean {
-  const profileDir = resolveBrowserProfileDir(providerId, dataDir);
+  const safeProviderId = providerId.replace(/[^a-zA-Z0-9_-]/g, "_") || "provider";
+  const providerRoot = path.join(dataDir, "browser-profiles", safeProviderId);
+  let removed = false;
   try {
-    if (!fs.existsSync(profileDir)) return false;
-    fs.rmSync(profileDir, { recursive: true, force: true });
-    return true;
+    // The legacy layout (one directory per provider, no engine segment) is
+    // removed too — it holds a profile in a format this browser cannot read.
+    for (const dir of [providerRoot, ...(["chromium", "firefox", "webkit"] as const).map(
+      (engine) => path.join(providerRoot, engine)
+    )]) {
+      if (!fs.existsSync(dir)) continue;
+      fs.rmSync(dir, { recursive: true, force: true });
+      removed = true;
+    }
+    return removed;
   } catch {
     // A locked profile directory is not fatal — the next capture simply falls
     // back to a fresh sign-in.
-    return false;
+    return removed;
   }
 }
 
@@ -769,7 +791,7 @@ export class InAppLoginService extends EventEmitter {
     }
 
     if (!context && isPersistentProfileEnabled()) {
-      const profileDir = resolveBrowserProfileDir(providerId, resolveDataDir());
+      const profileDir = resolveBrowserProfileDir(providerId, resolveDataDir(), target.browserName);
       try {
         fs.mkdirSync(profileDir, { recursive: true, mode: 0o700 });
         const persistentContext = await launchPersistentContext(
