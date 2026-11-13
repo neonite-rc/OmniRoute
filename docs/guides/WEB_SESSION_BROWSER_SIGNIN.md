@@ -237,12 +237,16 @@ the provider, so a bad value is reported instead of silently stored.
 
 ## Re-syncing without signing in again
 
-OmniRoute keeps a **separate browser profile per provider**, under the
-OmniRoute data directory:
+OmniRoute keeps a **separate browser profile per provider and per browser**,
+under the OmniRoute data directory:
 
 ```
-<DATA_DIR>/browser-profiles/<provider>/
+<DATA_DIR>/browser-profiles/<provider>/<browser>/
 ```
+
+(`<browser>` is `chromium`, `firefox` or `webkit` — Chromium and Firefox write
+different profile formats, so each keeps its own session. Sign in from Chrome
+today and Firefox tomorrow and both stay signed in.)
 
 That profile holds the live web session, so a later **Re-sync session** reuses
 it: if the session is still valid, the capture completes on its own. Only when
