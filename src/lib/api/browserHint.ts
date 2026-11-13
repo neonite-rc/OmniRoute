@@ -12,13 +12,38 @@
  * and says nothing about what the host can open. The host's own default
  * browser is used instead.
  *
- * The Host header is spoofable, so this only steers which browser opens. It
- * never decides an auth or security outcome. The same reasoning is applied
- * by `buildRemoteOAuthHint` for the OAuth callback.
+ * The signal used is the token-stamped socket peer our own server writes
+ * (`PEER_IP_HEADER`), which cannot be forged by a client. The Host header is
+ * only a fallback for callers that carry no stamp (direct Node calls, tests).
+ *
+ * This only steers which browser opens. It never decides an auth or security
+ * outcome. The same reasoning is applied by `buildRemoteOAuthHint` for the
+ * OAuth callback.
  */
 
-import { isLoopbackHost } from "@/server/authz/routeGuard";
+import os from "node:os";
+
+import { PEER_IP_HEADER, VIA_PROXY_HEADER } from "@/server/authz/headers";
+import { resolveStampedPeer, resolveStampedViaProxy } from "@/server/authz/peerStamp";
+import { classifyHostLocality, isLoopbackHost } from "@/server/authz/routeGuard";
 import type { BrowserFamily } from "@/shared/providers/browserFamily";
+
+/**
+ * Is this address one of this host's own?
+ *
+ * A browser on this machine that reaches OmniRoute through the machine's LAN
+ * address connects from that same address — so the peer is one of the host's
+ * own interfaces, not a loopback one. Both mean "same machine".
+ */
+function isHostOwnAddress(ip: string): boolean {
+  const interfaces = os.networkInterfaces();
+  for (const addresses of Object.values(interfaces)) {
+    for (const address of addresses ?? []) {
+      if (address.address === ip) return true;
+    }
+  }
+  return false;
+}
 
 /**
  * The browser family to honour for a sign-in request.
@@ -32,9 +57,24 @@ export function resolveBrowserHintForRequest(
 ): BrowserFamily {
   if (!requested || requested === "unknown") return "unknown";
 
+  // 1. The trusted socket peer, stamped by our own server. This works no
+  //    matter which address the dashboard was opened with.
+  const stampToken = process.env.OMNIROUTE_PEER_STAMP_TOKEN;
+  const peer = resolveStampedPeer(request.headers.get(PEER_IP_HEADER), stampToken);
+  if (peer) {
+    // Behind a reverse proxy the socket peer is the proxy hop, not the
+    // operator's browser — the hint says nothing about this host.
+    if (resolveStampedViaProxy(request.headers.get(VIA_PROXY_HEADER), stampToken)) {
+      return "unknown";
+    }
+    if (classifyHostLocality(peer) === "loopback" || isHostOwnAddress(peer)) {
+      return requested;
+    }
+    return "unknown";
+  }
+
+  // 2. No stamp: fall back to the Host header (spoofable — a UI hint only).
   const hostHeader = request.headers.get("host");
-  // No Host header at all (an in-process call): treat it as local.
   if (hostHeader == null) return requested;
-  if (!isLoopbackHost(hostHeader)) return "unknown";
-  return requested;
+  return isLoopbackHost(hostHeader) ? requested : "unknown";
 }
