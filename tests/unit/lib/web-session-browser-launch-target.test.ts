@@ -31,6 +31,12 @@ describe("resolveBrowserLaunchTarget", () => {
     assert.equal(target.browserName, "chromium");
     assert.equal(target.preferredEngine, "chromium");
     assert.ok(target.label.length > 0);
+    // The label must name a browser that can actually open — never a brand
+    // the host does not have, or the operator looks for the wrong window.
+    assert.ok(
+      /chrome|chromium|edge|brave|vivaldi/i.test(target.label),
+      `unexpected label: ${target.label}`
+    );
   });
 
   test("honours an Edge request with a Chromium window", async () => {
@@ -38,6 +44,10 @@ describe("resolveBrowserLaunchTarget", () => {
     assert.equal(target.browserName, "chromium");
     assert.equal(target.preferredEngine, "chromium");
     assert.ok(target.label.length > 0);
+    assert.ok(
+      /chrome|chromium|edge|brave|vivaldi/i.test(target.label),
+      `unexpected label: ${target.label}`
+    );
   });
 
   test("falls back to the host default when no browser was requested", async () => {
