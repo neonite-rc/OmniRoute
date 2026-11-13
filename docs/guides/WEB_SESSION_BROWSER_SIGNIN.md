@@ -107,6 +107,10 @@ If you view the dashboard from a laptop while OmniRoute runs on a server, the
 browser family is ignored — your laptop's browser says nothing about what the
 server can open. The server then uses its own default browser.
 
+The check is the real network peer of the request, so a dashboard opened on
+the OmniRoute machine itself is recognised even when you reach it through the
+machine's LAN address rather than `localhost`.
+
 ---
 
 ## Testing it
