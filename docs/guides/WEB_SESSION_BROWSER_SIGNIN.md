@@ -1,7 +1,7 @@
 ---
 title: "Web-session providers — browser sign-in"
 version: 3.8.51
-lastUpdated: 2026-11-09
+lastUpdated: 2026-11-16
 ---
 
 # Web-session providers — browser sign-in
@@ -21,21 +21,27 @@ sign in as usual, and the session is captured and stored.**
 
 1. Open the provider page in the OmniRoute dashboard.
 2. In **Add connection**, click **Sign in with browser**.
-3. A browser window opens on the OmniRoute host at the provider's sign-in page.
-4. Sign in there. OmniRoute watches the session and captures it as soon as the
-   provider's credential appears. The window closes on its own.
-5. The connection is **created and stored automatically** — there is no second
+3. **A new tab opens in the very browser the dashboard is running in** — that
+   tab is the sign-in. Wherever the dashboard is open, the sign-in is right
+   there.
+4. Sign in there: on the OmniRoute host itself a browser window opens on that
+   machine (in the browser family the dashboard reported); from another
+   machine the login page is streamed straight into the tab (see **Where the
+   sign-in appears**).
+5. OmniRoute watches the session and captures it as soon as the provider's
+   credential appears. The tab closes itself and the dashboard picks the
+   credential up.
+6. The connection is **created and stored automatically** — there is no second
    "Save" step. The dashboard returns to the connection list with the new
    connection in it.
 
 For an existing connection, open **Edit** and click **Re-sync session** — the
 new session is stored directly on the connection, with no copy/paste step.
 
-> **The browser opens on the OmniRoute host**, not in your dashboard tab — but it
-> is the *same browser* you are using to view the dashboard (see
-> **Which browser opens**). On a desktop install that is your own machine. On a
-> remote/server deployment it is the server's display — sign in there, or fall
-> back to pasting the credential.
+> **On a desktop install** the sign-in opens as a window in the _same browser_
+> you are using to view the dashboard (see **Which browser opens**). **On a
+> remote/server deployment** it opens inside the sign-in tab, so you never have
+> to sign in on a machine you are not sitting at.
 
 ---
 
@@ -45,11 +51,11 @@ The sign-in window opens in **the same browser you are using right now** — the
 dashboard detects it and tells the server, so you sign in where you already
 are:
 
-| You are using | The window that opens |
-| ------------- | --------------------- |
-| Firefox       | Firefox               |
-| Chrome        | Chrome                |
-| Edge          | Edge                  |
+| You are using | The window that opens                                              |
+| ------------- | ------------------------------------------------------------------ |
+| Firefox       | Firefox                                                            |
+| Chrome        | Chrome                                                             |
+| Edge          | Edge                                                               |
 | Safari        | Safari's engine (WebKit) — Safari itself exposes no automation API |
 
 The sign-in **never** opens a different browser: a Firefox dashboard always
@@ -65,9 +71,9 @@ which window to look for.
 The browser build is an **OmniRoute-side** dependency. When the host does not
 have the build cached yet, the host downloads it itself on the first sign-in
 that needs it (a one-time download, cached in the Playwright browser cache
-under the host's home directory). The panel says *"The OmniRoute host
+under the host's home directory). The panel says _"The OmniRoute host
 downloads it on the first sign-in — there is nothing to install on your
-side."*
+side."_
 
 ### The same window, when the browser allows it
 
@@ -82,8 +88,8 @@ way, OmniRoute **attaches to that very browser**:
 - only the tab OmniRoute opened is closed afterwards; your own tabs and your
   browser are left untouched.
 
-The panel says *"Uses the Chrome that is already running — you are signed in
-there already."* when this is the case.
+The panel says _"Uses the Chrome that is already running — you are signed in
+there already."_ when this is the case.
 
 When the browser was started the ordinary way, the sign-in opens a new window
 of the same browser with a **dedicated profile per provider**: you sign in
@@ -111,6 +117,39 @@ The check is the real network peer of the request, so a dashboard opened on
 the OmniRoute machine itself is recognised even when you reach it through the
 machine's LAN address rather than `localhost`.
 
+### Where the sign-in appears
+
+The button always opens **a new tab in the browser the dashboard is running
+in** — that tab is the sign-in, so the sign-in is always where you are
+looking. What happens _inside_ that tab depends on where the OmniRoute host
+is:
+
+| Where the dashboard is                          | What the operator sees                                                                                                                             |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| On the OmniRoute host, which has a display      | The tab says a sign-in window opened, and a browser window opens on that machine, in the browser family the dashboard reported.                    |
+| On another machine (laptop on the same network) | The tab shows the **live sign-in**: the host runs the browser without a display and streams the login page into the tab. You click and type there. |
+| On the OmniRoute host, which has no display     | The same streamed view — a window could not open at all.                                                                                           |
+
+The streamed view needs nothing on your side: no browser extension, no
+remote-debugging flag, no helper program. The host runs the browser it
+already manages (downloading the build itself on first use) and pushes frames
+of the login page into the tab; your clicks and keystrokes travel back to the
+host, where the session is captured exactly as in the native flow.
+
+The browser profile is shared between both modes, so a session captured in
+the tab counts for the next **Re-sync session**.
+
+> The streamed view draws the login page as it is, a few times per second.
+> Typing is forwarded keystroke by keystroke, so a password field behaves
+> like a normal one — but a page that redraws itself constantly may look
+> choppy.
+
+> A browser cannot hand another site's cookies to a web page (that is the
+> same-origin rule every browser enforces), so a tab that shows the
+> provider's own page directly could never be captured. OmniRoute therefore
+> signs in with the browser **it** controls, and shows you that browser's
+> view — in the tab, on your screen.
+
 ---
 
 ## Testing it
@@ -122,10 +161,12 @@ machine's LAN address rather than `localhost`.
 2. **Add connection**. The **"Sign in with browser"** panel is the first thing
    in the dialog; the manual instructions are collapsed behind a
    **"Manual paste"** row.
-3. Click **Sign in with browser**. A browser window opens at the provider's
-   sign-in page **on the OmniRoute host**, in the same browser family the
-   dashboard is running in (see **Which browser opens**).
-4. Sign in. The window closes by itself as soon as the credential appears.
+3. Click **Sign in with browser**. A **new tab** opens in this browser and
+   runs the sign-in. On the OmniRoute host itself a browser window opens at
+   the provider's sign-in page **on that host**, in the same browser family
+   the dashboard is running in (see **Which browser opens**); from another
+   machine the tab shows the live sign-in instead.
+4. Sign in. The tab closes by itself as soon as the credential appears.
 5. The dashboard is back on the connection list with the new connection in it.
 
 **Expect:** one connection, named as in the **Name** field, `testStatus: active`,
@@ -153,10 +194,10 @@ sqlite3 "$DATA_DIR/storage.sqlite" \
 
 **Expect the right shape:**
 
-| Provider kind | `provider_specific_data` |
-| ------------- | ------------------------ |
+| Provider kind | `provider_specific_data`                                                       |
+| ------------- | ------------------------------------------------------------------------------ |
 | cookie        | `cookie` = the **full `Cookie` header** (`a=1; b=2`) — not one value, not JSON |
-| token         | the **bare token** (no `Bearer ` prefix) under the provider's storage key |
+| token         | the **bare token** (no `Bearer ` prefix) under the provider's storage key      |
 
 For a token provider, read the provider's own key instead of `cookie` —
 `token` for `kimi-web`, `zai-web`, `copilot-web`, `deepseek-web` and
@@ -214,18 +255,16 @@ wrongly reported as expired.
 
 ### 6. Headless host
 
-On a server with no display the browser cannot open. The button reports it
-plainly:
+A headless host does not need a virtual display: the sign-in is streamed into
+the sign-in tab, so it appears on your screen wherever the dashboard is open.
 
-> The OmniRoute host has no display, so the sign-in browser cannot open. Run
-> OmniRoute on a desktop machine, or start it with a virtual display (for
-> example `xvfb-run npm run dev`), or paste the session credential manually.
+The tab shows the live login page, and your clicks and keystrokes go to it.
+Nothing has to be installed on the host — no X server, no VNC daemon, no
+Docker image.
 
-To test the flow on a headless box, run OmniRoute under a virtual display:
-
-```bash
-xvfb-run -a npm run dev
-```
+> If the host has no display and the browser family the dashboard reported
+> cannot be downloaded, the sign-in reports that plainly instead of silently
+> falling back to another browser.
 
 ### 7. Manual fallback
 
@@ -275,28 +314,28 @@ session). Both live in the source of truth:
 - `src/shared/providers/webSessionCredentials.ts` — the credential kind and
   storage keys.
 
-| Provider | Kind | Sign-in page |
-| -------- | ---- | ------------ |
-| `claude-web` | cookie | `https://claude.ai/login` |
-| `gemini-web` | cookie | `https://gemini.google.com/app` |
-| `grok-web` | cookie | `https://grok.com/login` |
-| `perplexity-web` | cookie | `https://www.perplexity.ai/login` |
-| `blackbox-web` | cookie | `https://app.blackbox.ai/login` |
-| `adapta-web` | cookie | `https://agent.adapta.one/login` |
-| `chatglm-web` | cookie | `https://chatglm.cn/` |
-| `doubao-web` | cookie | `https://www.dola.com/` |
+| Provider         | Kind   | Sign-in page                                                    |
+| ---------------- | ------ | --------------------------------------------------------------- |
+| `claude-web`     | cookie | `https://claude.ai/login`                                       |
+| `gemini-web`     | cookie | `https://gemini.google.com/app`                                 |
+| `grok-web`       | cookie | `https://grok.com/login`                                        |
+| `perplexity-web` | cookie | `https://www.perplexity.ai/login`                               |
+| `blackbox-web`   | cookie | `https://app.blackbox.ai/login`                                 |
+| `adapta-web`     | cookie | `https://agent.adapta.one/login`                                |
+| `chatglm-web`    | cookie | `https://chatglm.cn/`                                           |
+| `doubao-web`     | cookie | `https://www.dola.com/`                                         |
 | `duckduckgo-web` | cookie | `https://duckduckgo.com/?q=DuckDuckGo+AI+Chat&ia=chat&duckai=1` |
-| `manus-web` | cookie | `https://manus.im/login` |
-| `muse-spark-web` | cookie | `https://www.meta.ai/` |
-| `poe-web` | cookie | `https://poe.com/login` |
-| `v0-vercel-web` | cookie | `https://v0.dev/login` |
-| `venice-web` | cookie | `https://venice.ai/login` |
-| `xiaomimimo-web` | cookie | `https://aistudio.xiaomimimo.com/login` |
-| `deepseek-web` | token | `https://chat.deepseek.com/sign_in` |
-| `kimi-web` | token | `https://www.kimi.com/` |
-| `copilot-web` | token | `https://copilot.microsoft.com/` |
-| `zai-web` | token | `https://chat.z.ai/` |
-| `t3-chat-web` | token | `https://t3.chat/login` |
+| `manus-web`      | cookie | `https://manus.im/login`                                        |
+| `muse-spark-web` | cookie | `https://www.meta.ai/`                                          |
+| `poe-web`        | cookie | `https://poe.com/login`                                         |
+| `v0-vercel-web`  | cookie | `https://v0.dev/login`                                          |
+| `venice-web`     | cookie | `https://venice.ai/login`                                       |
+| `xiaomimimo-web` | cookie | `https://aistudio.xiaomimimo.com/login`                         |
+| `deepseek-web`   | token  | `https://chat.deepseek.com/sign_in`                             |
+| `kimi-web`       | token  | `https://www.kimi.com/`                                         |
+| `copilot-web`    | token  | `https://copilot.microsoft.com/`                                |
+| `zai-web`        | token  | `https://chat.z.ai/`                                            |
+| `t3-chat-web`    | token  | `https://t3.chat/login`                                         |
 
 The providers with a dedicated sign-in flow of their own (Adobe Firefly's
 system-Chrome capture, MaxAI's email device-pair, Conol's dedicated browser
@@ -310,14 +349,14 @@ The captured value is normalised into the shape the provider's executor
 actually reads, so a successful sign-in is a usable credential rather than a
 blob:
 
-| Provider kind | Stored in `apiKey`                      | Stored in `providerSpecificData`      |
-| ------------- | --------------------------------------- | ------------------------------------- |
-| Cookie        | the full `Cookie` header (`a=1; b=2`)  | `cookie` (same header) + storage keys  |
-| Token         | the bare token (no `Bearer ` prefix)    | the token under the provider's keys    |
+| Provider kind | Stored in `apiKey`                    | Stored in `providerSpecificData`      |
+| ------------- | ------------------------------------- | ------------------------------------- |
+| Cookie        | the full `Cookie` header (`a=1; b=2`) | `cookie` (same header) + storage keys |
+| Token         | the bare token (no `Bearer ` prefix)  | the token under the provider's keys   |
 
 Cookie capture takes **every cookie on the provider's domain**, not just the
 one the provider declares. Providers rely on companion cookies — Grok needs
-`sso` *and* `sso-rw`, and Cloudflare's `cf_clearance` is pinned to the browser
+`sso` _and_ `sso-rw`, and Cloudflare's `cf_clearance` is pinned to the browser
 that earned it — so a partial capture would sign in successfully and then be
 rejected upstream.
 
@@ -335,25 +374,32 @@ into it — so a failed automatic save can be retried from the form.
 
 ## Troubleshooting
 
-| Symptom                                              | What it means                                                                             |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| "Browser sign-in is not available for '<provider>'"   | No token-extraction config for that provider — paste the credential manually.               |
-| "The OmniRoute host has no display…"                  | The host is headless, so the sign-in browser cannot open. Use a virtual display (`xvfb-run npm run dev`) or paste the credential manually. |
-| "Login timed out"                                    | The credential never appeared in the browser session. The capture waits up to 5 minutes (2 for `duckduckgo-web`, `t3-chat-web`) — sign in again and retry. |
-| "The browser session did not yield a usable credential" | The session was captured but the provider expected a different credential kind.           |
-| "The saved browser session for this provider has expired." | The provider rejected the saved session. The stale profile was deleted — sign in again. |
-| The browser window does not appear                    | The OmniRoute host has no display (headless server). Use the manual paste, or run with a virtual display. |
-| The capture succeeds but requests 401                 | The stored value is not the shape the executor reads. Check `provider_specific_data.cookie` (see **Verify what was stored**). |
-| A Firefox window opens when you expected Chrome      | The window follows the browser the **dashboard** is in, not the host's default. Sign in from a Chrome tab if you want Chrome. |
-| The window opens in a browser you do not recognise    | The dashboard's browser could not be identified, so the host's default browser was used. The panel names it — if that is wrong, open the dashboard in your usual browser. |
-| "Could not download the Firefox build…"               | The host could not fetch the browser build (network or disk space). The download is retried on the next sign-in; the host caches it once it succeeds. |
-| The window opens in a browser you do not have accounts in | The browser was started fresh with a dedicated profile, so it has none of your accounts. Sign in once — the profile is kept, so later re-syncs need no password. |
-| The sign-in opens a different browser than the dashboard | The dashboard is served from another machine, so its browser says nothing about what the host can open. The host uses its own default browser in that case. |
+| Symptom                                                       | What it means                                                                                                                                                             |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Browser sign-in is not available for '<provider>'"           | No token-extraction config for that provider — paste the credential manually.                                                                                             |
+| "Your browser blocked the sign-in tab."                       | The browser blocked the new tab (pop-ups). Allow pop-ups for the dashboard's site and click the button again.                                                             |
+| "The sign-in tab was closed before the session was captured." | The tab was closed by hand before the sign-in finished. Click the button again.                                                                                           |
+| "The OmniRoute host has no display…"                          | The host is headless, so the sign-in browser cannot open. Use a virtual display (`xvfb-run npm run dev`) or paste the credential manually.                                |
+| "Login timed out"                                             | The credential never appeared in the browser session. The capture waits up to 5 minutes (2 for `duckduckgo-web`, `t3-chat-web`) — sign in again and retry.                |
+| "The browser session did not yield a usable credential"       | The session was captured but the provider expected a different credential kind.                                                                                           |
+| "The saved browser session for this provider has expired."    | The provider rejected the saved session. The stale profile was deleted — sign in again.                                                                                   |
+| The browser window does not appear                            | The OmniRoute host has no display (headless server) — the sign-in tab then shows the live view instead.                                                                   |
+| The capture succeeds but requests 401                         | The stored value is not the shape the executor reads. Check `provider_specific_data.cookie` (see **Verify what was stored**).                                             |
+| A Firefox window opens when you expected Chrome               | The window follows the browser the **dashboard** is in, not the host's default. Sign in from a Chrome tab if you want Chrome.                                             |
+| The window opens in a browser you do not recognise            | The dashboard's browser could not be identified, so the host's default browser was used. The panel names it — if that is wrong, open the dashboard in your usual browser. |
+| "Could not download the Firefox build…"                       | The host could not fetch the browser build (network or disk space). The download is retried on the next sign-in; the host caches it once it succeeds.                     |
+| The window opens in a browser you do not have accounts in     | The browser was started fresh with a dedicated profile, so it has none of your accounts. Sign in once — the profile is kept, so later re-syncs need no password.          |
+| The sign-in opens a different browser than the dashboard      | The dashboard is served from another machine, so its browser says nothing about what the host can open. The host uses its own default browser in that case.               |
 
 ## Related
 
-- [`docs/security/ROUTE_GUARD_TIERS.md`](../security/ROUTE_GUARD_TIERS.md) — both sign-in
-  endpoints are `LOCAL_ONLY`: they launch a browser, so they only run for loopback callers.
+- [`docs/security/ROUTE_GUARD_TIERS.md`](../security/ROUTE_GUARD_TIERS.md) — the sign-in
+  endpoints are `LOCAL_ONLY`: they launch a browser, so they only run for
+  loopback callers (a private-LAN peer is allowed too — that is what makes the
+  streamed flow work from another machine).
 - `open-sse/services/inAppLoginService.ts` — the capture service.
+- `open-sse/services/webSessionStreamService.ts` — the streamed sign-in (frames + input).
+- `src/app/(dashboard)/dashboard/providers/web-session-signin/page.tsx` — the sign-in tab.
 - `src/lib/providers/webSessionCredentialPayload.ts` — the credential normaliser.
+- `src/lib/providers/webSessionPersistCapture.ts` — stores a captured session on a connection.
 - `src/lib/providers/webSessionCapture.ts` — the stale-session probe.

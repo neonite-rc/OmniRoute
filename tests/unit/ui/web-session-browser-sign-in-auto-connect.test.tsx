@@ -11,13 +11,34 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
-const { default: AddApiKeyModal } = await import(
-  "../../../src/app/(dashboard)/dashboard/providers/[id]/components/modals/AddApiKeyModal"
-);
+const { default: AddApiKeyModal } =
+  await import("../../../src/app/(dashboard)/dashboard/providers/[id]/components/modals/AddApiKeyModal");
+const { WEB_SESSION_SIGNIN_MESSAGE } =
+  await import("../../../src/lib/providers/webSessionSigninMessage");
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const CAPTURED_CREDENTIAL = "sessionKey=abc; other=def";
+
+/** The sign-in tab the dashboard opened. */
+class FakeTab {
+  closed = false;
+}
+
+/** Let the panel open the sign-in tab (jsdom blocks pop-ups by default). */
+function stubTab(): void {
+  vi.spyOn(window, "open").mockReturnValue(new FakeTab() as unknown as Window);
+}
+
+/** Post the sign-in tab's answer back to the dashboard tab. */
+function postSigninResult(data: Record<string, unknown>) {
+  window.dispatchEvent(
+    new MessageEvent("message", {
+      data: { type: WEB_SESSION_SIGNIN_MESSAGE, ...data },
+      origin: window.location.origin,
+    })
+  );
+}
 
 function render(props: Record<string, unknown>) {
   const el = document.createElement("div");
@@ -39,7 +60,9 @@ function render(props: Record<string, unknown>) {
 }
 
 function findButton(el: HTMLElement, label: string): HTMLButtonElement | null {
-  return Array.from(el.querySelectorAll("button")).find((b) => b.textContent?.includes(label)) ?? null;
+  return (
+    Array.from(el.querySelectorAll("button")).find((b) => b.textContent?.includes(label)) ?? null
+  );
 }
 
 describe("AddApiKeyModal — browser sign-in auto-connect", () => {
@@ -53,23 +76,15 @@ describe("AddApiKeyModal — browser sign-in auto-connect", () => {
       el.remove();
     }
     containers.length = 0;
+    vi.restoreAllMocks();
   });
 
   it("creates the connection straight after the capture, without a Save click", async () => {
     originalFetch = global.fetch;
 
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url === "/api/providers/web-session-login") {
-        return Response.json({
-          success: true,
-          credential: CAPTURED_CREDENTIAL,
-          providerSpecificData: { cookie: CAPTURED_CREDENTIAL },
-          alreadySignedIn: false,
-        });
-      }
-      return Response.json({ valid: true });
-    });
+    const fetchMock = vi.fn(async () => Response.json({ valid: true }));
     global.fetch = fetchMock as never;
+    stubTab();
 
     const onSave = vi.fn(async () => undefined);
     const { el, root } = render({ onSave });
@@ -80,6 +95,16 @@ describe("AddApiKeyModal — browser sign-in auto-connect", () => {
 
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    // The sign-in tab reports the captured session back.
+    await act(async () => {
+      postSigninResult({
+        success: true,
+        credential: CAPTURED_CREDENTIAL,
+        providerSpecificData: { cookie: CAPTURED_CREDENTIAL },
+        alreadySignedIn: false,
+      });
     });
 
     expect(onSave).toHaveBeenCalledTimes(1);
@@ -96,25 +121,27 @@ describe("AddApiKeyModal — browser sign-in auto-connect", () => {
     // unreachable from the OmniRoute host must not swallow a good capture.
     originalFetch = global.fetch;
 
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url === "/api/providers/web-session-login") {
-        return Response.json({
-          success: true,
-          credential: CAPTURED_CREDENTIAL,
-          providerSpecificData: { cookie: CAPTURED_CREDENTIAL },
-          alreadySignedIn: false,
-        });
-      }
-      return Response.json({ valid: false, error: "fetch failed" });
-    });
+    const fetchMock = vi.fn(async () => Response.json({ valid: false, error: "fetch failed" }));
     global.fetch = fetchMock as never;
+    stubTab();
 
     const onSave = vi.fn(async () => undefined);
     const { el, root } = render({ onSave });
     containers.push({ root, el });
 
     await act(async () => {
-      findButton(el, "Sign in with browser")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      findButton(el, "Sign in with browser")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true })
+      );
+    });
+
+    await act(async () => {
+      postSigninResult({
+        success: true,
+        credential: CAPTURED_CREDENTIAL,
+        providerSpecificData: { cookie: CAPTURED_CREDENTIAL },
+        alreadySignedIn: false,
+      });
     });
 
     expect(fetchMock.mock.calls.some(([url]) => url === "/api/providers/validate")).toBe(false);

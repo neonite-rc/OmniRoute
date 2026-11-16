@@ -11,22 +11,35 @@
  * connection through the normal add-connection flow, so the existing
  * validation and audit paths still apply.
  *
+ * WHERE THE WINDOW APPEARS depends on where the dashboard is:
+ *
+ *  - The dashboard is open on the OmniRoute host → the browser opens as a
+ *    window on that machine, in the browser family the dashboard reported.
+ *  - The dashboard is open on another machine (a laptop driving a headless
+ *    server on the LAN) → the host runs the browser without a display and
+ *    streams the view into the dashboard, so the operator signs in on their
+ *    own screen. The route answers with `{ mode: "stream", sessionId }` and
+ *    the dashboard follows the event stream at
+ *    `/api/providers/web-session-login/stream`.
+ *
  * The companion `POST /api/providers/{id}/login` route persists straight onto
  * an existing connection — that is the "re-sync" path.
  *
  * Security: this route launches a headful Chromium (a child process), so it
  * is classified LOCAL_ONLY in `src/server/authz/routeGuard.ts` — loopback
  * enforcement runs before any auth check, so a leaked JWT via a tunnel cannot
- * trigger a browser spawn (Hard Rules #15 + #17).
+ * trigger a browser spawn (Hard Rules #15 + #17). A private-LAN peer is
+ * allowed (owner-authorized), which is what makes the streamed flow work from
+ * another machine on the same network.
  */
 
 import { NextResponse } from "next/server";
 import { requireManagementAuth } from "@/lib/api/requireManagementAuth";
 import { clampLoginTimeoutMs } from "@/lib/api/loginTimeout";
-import { buildWebSessionCredentialPayload } from "@/lib/providers/webSessionCredentialPayload";
+import { buildWebSessionCaptureResult } from "@/lib/providers/webSessionCaptureResult";
 import { getWebSessionCredentialRequirement } from "@/shared/providers/webSessionCredentials";
 import { webSessionLoginSchema } from "@/shared/validation/schemas";
-import { resolveBrowserHintForRequest } from "@/lib/api/browserHint";
+import { resolveBrowserHintForRequest, resolveSignInMode } from "@/lib/api/browserHint";
 import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error.ts";
 
@@ -71,70 +84,66 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { inAppLoginService } = await import("@omniroute/open-sse/services/inAppLoginService.ts");
+    const { inAppLoginService, hostHasDisplay, isDisplayUnavailableError } =
+      await import("@omniroute/open-sse/services/inAppLoginService.ts");
 
-    const result = await inAppLoginService.startLogin(provider, {
-      timeout: clampLoginTimeoutMs(validation.data.timeout),
-      // The dashboard reports the browser it detected in its own user agent,
-      // so the sign-in window opens in the browser the operator is using —
-      // but only when the dashboard is open on this very host. A dashboard
-      // served to another machine says nothing about what this host can open.
-      browser: resolveBrowserHintForRequest(request, validation.data.browser ?? "unknown"),
-    });
+    const timeout = clampLoginTimeoutMs(validation.data.timeout);
+    // The dashboard reports the browser it detected in its own user agent,
+    // so the sign-in window opens in the browser the operator is using —
+    // but only when the dashboard is open on this very host. A dashboard
+    // served to another machine says nothing about what this host can open.
+    const browser = resolveBrowserHintForRequest(request, validation.data.browser ?? "unknown");
 
-    if (!result.success || !result.credentials) {
+    // Where does the window have to appear? In front of the operator.
+    //
+    //  - The dashboard is open on another machine → a window on this host
+    //    would be invisible to them, so the view is streamed into the
+    //    dashboard instead.
+    //  - This host has no display → same thing; a window cannot open at all.
+    const streamed = resolveSignInMode(request, hostHasDisplay()) === "streamed";
+
+    if (streamed) {
+      const { startStreamedLogin } =
+        await import("@omniroute/open-sse/services/webSessionStreamService.ts");
+      const { sessionId } = await startStreamedLogin(provider, { timeout, browser });
+      return NextResponse.json({
+        success: true,
+        mode: "stream",
+        sessionId,
+        provider,
+      });
+    }
+
+    const result = await inAppLoginService.startLogin(provider, { timeout, browser });
+
+    // The host turned out to have no display after all (a stale DISPLAY, a
+    // container without /tmp/.X11-unix). Fall back to the streamed view so the
+    // operator still gets a sign-in window.
+    if (!result.success && isDisplayUnavailableError(result.error)) {
+      const { startStreamedLogin } =
+        await import("@omniroute/open-sse/services/webSessionStreamService.ts");
+      const { sessionId } = await startStreamedLogin(provider, { timeout, browser });
+      return NextResponse.json({
+        success: true,
+        mode: "stream",
+        sessionId,
+        provider,
+      });
+    }
+
+    const payload = await buildWebSessionCaptureResult(provider, result);
+    // `success === false` (not `!success`) — the truthiness form does not
+    // narrow the union with strictNullChecks off, which this project uses.
+    if (payload.success === false) {
       return NextResponse.json(
         {
           success: false,
           // Hard Rule #12: the service's own error may still carry a raw
           // browser/Playwright dump — never ship it to the dashboard as-is.
-          error: sanitizeErrorMessage(result.error) || "Sign-in did not complete",
+          error: sanitizeErrorMessage(payload.error) || "Sign-in did not complete",
         },
         { status: 400 }
       );
-    }
-
-    // Build the canonical payload the executors read. The raw extraction map
-    // (cookie name → value) is NOT a credential the executors can use:
-    // perplexity-web and grok-web read `credentials.apiKey` as a Cookie header
-    // and claude-web reads `providerSpecificData.cookie`.
-    const payload = buildWebSessionCredentialPayload({
-      providerId: provider,
-      extracted: result.credentials,
-      cookies: result.cookies,
-    });
-
-    if (!payload.credential) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "The browser session did not yield a usable credential for this provider. Sign in again and retry.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // A capture that reused the saved browser profile can hand back a session
-    // the provider has since invalidated. Probe it before handing it to the
-    // form, and drop the stale profile so the next attempt asks for a real
-    // sign-in.
-    if (result.alreadySignedIn) {
-      const { capturedSessionProbe } = await import("@/lib/providers/webSessionCapture");
-      const validation = await capturedSessionProbe.validate(provider, payload);
-      if (validation.expired) {
-        const { clearBrowserProfile } =
-          await import("@omniroute/open-sse/services/inAppLoginService.ts");
-        clearBrowserProfile(provider);
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "The saved browser session for this provider has expired. Run the sign-in again to refresh it.",
-          },
-          { status: 400 }
-        );
-      }
     }
 
     return NextResponse.json({
@@ -144,7 +153,7 @@ export async function POST(request: Request) {
       credential: payload.credential,
       apiKey: payload.apiKey,
       providerSpecificData: payload.providerSpecificData,
-      alreadySignedIn: result.alreadySignedIn === true,
+      alreadySignedIn: payload.alreadySignedIn,
     });
   } catch (err) {
     // Hard Rule #12: never put raw err.message/stack in a response body.
