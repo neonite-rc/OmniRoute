@@ -175,9 +175,12 @@ export function clearBrowserProfile(
   try {
     // The legacy layout (one directory per provider, no engine segment) is
     // removed too — it holds a profile in a format this browser cannot read.
-    for (const dir of [providerRoot, ...(["chromium", "firefox", "webkit"] as const).map(
-      (engine) => path.join(providerRoot, engine)
-    )]) {
+    for (const dir of [
+      providerRoot,
+      ...(["chromium", "firefox", "webkit"] as const).map((engine) =>
+        path.join(providerRoot, engine)
+      ),
+    ]) {
       if (!fs.existsSync(dir)) continue;
       fs.rmSync(dir, { recursive: true, force: true });
       removed = true;
@@ -208,7 +211,9 @@ export function describeBrowserLaunchFailure(err: unknown, browserName?: string)
       "(for example `xvfb-run npm run dev`), or paste the session credential manually."
     );
   }
-  if (/Executable doesn't exist|please run the following command to download new browsers/i.test(raw)) {
+  if (
+    /Executable doesn't exist|please run the following command to download new browsers/i.test(raw)
+  ) {
     // Name the browser that is actually missing: the operator asked for a
     // specific one, and "install chromium" would be the wrong advice for a
     // Firefox dashboard.
@@ -243,6 +248,50 @@ export function describeBrowserLaunchFailure(err: unknown, browserName?: string)
   // browser command line to the dashboard.
   const firstLine = raw.split("\n").find((line) => line.trim().length > 0) ?? "unknown error";
   return `Could not open the sign-in browser: ${firstLine.slice(0, 200)}`;
+}
+
+/**
+ * Does this host have a display a browser window can open on?
+ *
+ * A window opened on the host only reaches the operator when their dashboard
+ * runs on this same machine. Two things have to line up: the host must have a
+ * display, and the operator must be sitting at it.
+ *
+ * The check is deliberately generous about the environment: a server started
+ * from a service manager often has no DISPLAY even though the desktop is
+ * right there, so an X socket or a Wayland socket counts too.
+ */
+export function hostHasDisplay(): boolean {
+  if (process.env.DISPLAY || process.env.WAYLAND_DISPLAY) return true;
+  try {
+    // An X server socket on the host means there IS a display to open on.
+    const x11Sockets = "/tmp/.X11-unix";
+    if (fs.existsSync(x11Sockets)) {
+      const hasXServer = fs.readdirSync(x11Sockets).some((name) => /^X\d+$/.test(name));
+      if (hasXServer) return true;
+    }
+    const runtimeDir = process.env.XDG_RUNTIME_DIR;
+    if (runtimeDir && fs.existsSync(runtimeDir)) {
+      const hasWayland = fs
+        .readdirSync(runtimeDir)
+        .some((name) => name.startsWith("wayland-") && !name.endsWith(".lock"));
+      if (hasWayland) return true;
+    }
+  } catch {
+    // A host we cannot inspect is treated as display-less.
+  }
+  return false;
+}
+
+/**
+ * Did the sign-in fail because the host has no display?
+ *
+ * Used to fall back to the streamed sign-in (the view is shown inside the
+ * dashboard instead of a window on the host).
+ */
+export function isDisplayUnavailableError(message: string | undefined): boolean {
+  if (!message) return false;
+  return /has no display|Missing X server|\$DISPLAY|XServer/i.test(message);
 }
 
 // ─── Browser selection ──────────────────────────────────────────────────────
@@ -542,10 +591,13 @@ function resolvePlaywrightCliPath(): string | null {
 
 export async function launchEphemeralBrowser(
   playwright: PlaywrightModule,
-  target: BrowserLaunchTarget
+  target: BrowserLaunchTarget,
+  headless = false
 ): Promise<import("playwright").Browser> {
   const options: import("playwright").LaunchOptions = {
-    headless: false, // User must interact with the login page
+    // The operator interacts with the login page — either in the window that
+    // opens on their screen, or in the view streamed to their dashboard.
+    headless,
   };
 
   if (target.browserName === "firefox") {
@@ -574,24 +626,25 @@ async function launchPersistentContext(
   playwright: PlaywrightModule,
   target: BrowserLaunchTarget,
   profileDir: string,
-  contextOptions: { viewport: { width: number; height: number }; locale: string }
+  contextOptions: { viewport: { width: number; height: number }; locale: string },
+  headless = false
 ): Promise<import("playwright").BrowserContext> {
   if (target.browserName === "firefox") {
     return playwright.firefox.launchPersistentContext(profileDir, {
       ...contextOptions,
-      headless: false,
+      headless,
     });
   }
   if (target.browserName === "webkit") {
     return playwright.webkit.launchPersistentContext(profileDir, {
       ...contextOptions,
-      headless: false,
+      headless,
     });
   }
 
   const options: import("playwright").LaunchPersistentContextOptions = {
     ...contextOptions,
-    headless: false,
+    headless,
   };
   if (target.channel) options.channel = target.channel;
   if (target.executablePath) options.executablePath = target.executablePath;
@@ -637,7 +690,6 @@ export async function describeBrowserLaunch(hint?: BrowserFamily): Promise<Brows
   };
 }
 
-
 // ─── Service ────────────────────────────────────────────────────────────────
 
 export class InAppLoginService extends EventEmitter {
@@ -649,10 +701,20 @@ export class InAppLoginService extends EventEmitter {
    * @param options.timeout - Total timeout in ms (default: config value or 300s)
    * @param options.browser - The browser family the operator is using, so the
    *   sign-in window opens in the same browser they are looking at.
+   * @param options.headless - Run the browser without a display. Used when the
+   *   view is streamed to the operator's dashboard instead of opened as a
+   *   window on the host.
+   * @param options.onPage - Called with the live login page once it exists, so
+   *   a caller can stream the view and forward the operator's input.
    */
   async startLogin(
     providerId: string,
-    options?: { timeout?: number; browser?: BrowserFamily }
+    options?: {
+      timeout?: number;
+      browser?: BrowserFamily;
+      headless?: boolean;
+      onPage?: (page: import("playwright").Page) => void | Promise<void>;
+    }
   ): Promise<LoginResult> {
     const config = TOKEN_EXTRACTION_CONFIGS.get(providerId);
     if (!config) {
@@ -677,7 +739,10 @@ export class InAppLoginService extends EventEmitter {
     });
 
     try {
-      const result = await this.runBrowserLogin(config, options?.timeout, options?.browser);
+      const result = await this.runBrowserLogin(config, options?.timeout, options?.browser, {
+        headless: options?.headless === true,
+        onPage: options?.onPage,
+      });
       this.emit("status", {
         providerId,
         status: result.success ? "complete" : "error",
@@ -701,7 +766,11 @@ export class InAppLoginService extends EventEmitter {
   private async runBrowserLogin(
     config: TokenExtractionConfig,
     timeout?: number,
-    browserHint?: BrowserFamily
+    browserHint?: BrowserFamily,
+    options?: {
+      headless?: boolean;
+      onPage?: (page: import("playwright").Page) => void | Promise<void>;
+    }
   ): Promise<LoginResult> {
     const pollInterval = config.pollingConfig.pollInterval || 1000;
     const maxTimeout = timeout || config.pollingConfig.timeout || 300_000;
@@ -778,7 +847,15 @@ export class InAppLoginService extends EventEmitter {
 
     // The operator's own running browser is the best case: it already holds
     // their accounts, so the capture needs no password at all.
-    const attached = await attachToRunningBrowser(playwright, target.preferredEngine);
+    //
+    // Only when the operator's browser IS on this host: a browser running here
+    // belongs to the operator only in that case. When the view is streamed to
+    // a dashboard on another machine, this host's browser is somebody else's
+    // (or nobody's) — attaching would show the operator a window they do not
+    // own, with none of their accounts.
+    const attached = options?.headless
+      ? null
+      : await attachToRunningBrowser(playwright, target.preferredEngine);
     if (attached) {
       browser = attached.browser;
       context = attached.context;
@@ -798,7 +875,8 @@ export class InAppLoginService extends EventEmitter {
           playwright,
           target,
           profileDir,
-          contextOptions
+          contextOptions,
+          options?.headless === true
         );
         context = persistentContext;
       } catch (err) {
@@ -824,7 +902,7 @@ export class InAppLoginService extends EventEmitter {
       if (!context) {
         let launched: import("playwright").Browser;
         try {
-          launched = await launchEphemeralBrowser(playwright, target);
+          launched = await launchEphemeralBrowser(playwright, target, options?.headless === true);
         } catch (err) {
           throw new Error(describeBrowserLaunchFailure(err, target.browserName));
         }
@@ -841,6 +919,15 @@ export class InAppLoginService extends EventEmitter {
         ? await activeContext.newPage()
         : (activeContext.pages()[0] ?? (await activeContext.newPage()));
       if (attachedToRunningBrowser) openedTab = page;
+      // Hand the live page to the caller before the login page is loaded, so a
+      // streamed session can start showing the operator the view right away.
+      if (options?.onPage) {
+        try {
+          await options.onPage(page);
+        } catch {
+          // A failing observer must not break the capture.
+        }
+      }
       const credentials: Record<string, string> = {};
 
       // Playwright normalizes request header names to lowercase. Capture only

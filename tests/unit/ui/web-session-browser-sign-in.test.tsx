@@ -7,10 +7,31 @@ import WebSessionBrowserSignIn, {
   supportsBrowserSignIn,
   type WebSessionBrowserSignInProps,
 } from "@/app/(dashboard)/dashboard/providers/[id]/components/WebSessionBrowserSignIn";
+import { WEB_SESSION_SIGNIN_MESSAGE } from "@/lib/providers/webSessionSigninMessage";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const translator = ((key: string) => key) as WebSessionBrowserSignInProps["t"];
+
+/** The sign-in tab the dashboard opened. */
+class FakeTab {
+  closed = false;
+}
+
+/** Let the panel open the sign-in tab (jsdom blocks pop-ups by default). */
+function stubTab(): ReturnType<typeof vi.spyOn> {
+  return vi.spyOn(window, "open").mockReturnValue(new FakeTab() as unknown as Window);
+}
+
+/** Post the sign-in tab's answer back to the dashboard tab. */
+function postSigninResult(data: Record<string, unknown>) {
+  window.dispatchEvent(
+    new MessageEvent("message", {
+      data: { type: WEB_SESSION_SIGNIN_MESSAGE, ...data },
+      origin: window.location.origin,
+    })
+  );
+}
 
 function render(props: Partial<WebSessionBrowserSignInProps> = {}) {
   const container = document.createElement("div");
@@ -81,6 +102,7 @@ describe("WebSessionBrowserSignIn", () => {
     container?.remove();
     container = null;
     setUserAgent(originalUserAgent);
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -103,17 +125,11 @@ describe("WebSessionBrowserSignIn", () => {
   });
 
   it("captures the session and hands the credential back for the add flow", async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json({
-        success: true,
-        provider: "claude-web",
-        credential: "sessionKey=abc",
-        apiKey: "sessionKey=abc",
-        providerSpecificData: { cookie: "sessionKey=abc" },
-        alreadySignedIn: false,
-      })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ok: true }))
     );
-    vi.stubGlobal("fetch", fetchMock);
+    stubTab();
 
     const onCaptured = vi.fn();
     const rendered = render({ onCaptured });
@@ -127,12 +143,15 @@ describe("WebSessionBrowserSignIn", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const captureCall = fetchMock.mock.calls.find(
-      (call) => (call as [string])[0] === "/api/providers/web-session-login"
-    );
-    expect(captureCall).toBeTruthy();
-    const [, init] = captureCall as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).toMatchObject({ provider: "claude-web" });
+    // The sign-in tab reports the captured session back to this tab.
+    await act(async () => {
+      postSigninResult({
+        success: true,
+        credential: "sessionKey=abc",
+        providerSpecificData: { cookie: "sessionKey=abc" },
+        alreadySignedIn: false,
+      });
+    });
 
     expect(onCaptured).toHaveBeenCalledTimes(1);
     expect(onCaptured.mock.calls[0][0]).toMatchObject({
@@ -145,9 +164,7 @@ describe("WebSessionBrowserSignIn", () => {
   it("asks for the operator's own browser so the sign-in window opens in it", async () => {
     // The operator is on Firefox; the window that opens must be Firefox, not
     // the bundled Chromium that has none of their accounts.
-    setUserAgent(
-      "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0"
-    );
+    setUserAgent("Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0");
 
     const fetchMock = vi.fn(async (url: string) => {
       if (url.startsWith("/api/providers/web-session-browser")) {
@@ -157,15 +174,10 @@ describe("WebSessionBrowserSignIn", () => {
           mode: "launched",
         });
       }
-      return Response.json({
-        success: true,
-        provider: "claude-web",
-        credential: "sessionKey=abc",
-        providerSpecificData: { cookie: "sessionKey=abc" },
-        alreadySignedIn: false,
-      });
+      return Response.json({ ok: true });
     });
     vi.stubGlobal("fetch", fetchMock);
+    const open = stubTab();
 
     const rendered = render();
     container = rendered.container;
@@ -175,21 +187,15 @@ describe("WebSessionBrowserSignIn", () => {
       container?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const infoCall = fetchMock.mock.calls.find(
-      (call) => String((call as [string])[0]).startsWith("/api/providers/web-session-browser")
+    const infoCall = fetchMock.mock.calls.find((call) =>
+      String((call as [string])[0]).startsWith("/api/providers/web-session-browser")
     );
     expect(infoCall).toBeTruthy();
     expect(String((infoCall as [string])[0])).toContain("browser=firefox");
 
-    const captureCall = fetchMock.mock.calls.find(
-      (call) => (call as [string])[0] === "/api/providers/web-session-login"
-    );
-    expect(captureCall).toBeTruthy();
-    const [, init] = captureCall as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).toMatchObject({
-      provider: "claude-web",
-      browser: "firefox",
-    });
+    // The sign-in tab knows which provider to sign in to.
+    const [url] = open.mock.calls[0] as [string];
+    expect(url).toContain("provider=claude-web");
   });
 
   it("names the browser that will open", async () => {
@@ -268,8 +274,11 @@ describe("WebSessionBrowserSignIn", () => {
   });
 
   it("persists onto the connection in sync mode", async () => {
-    const fetchMock = vi.fn(async () => Response.json({ success: true, alreadySignedIn: true }));
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ok: true }))
+    );
+    const open = stubTab();
 
     const onSynced = vi.fn();
     const rendered = render({ mode: "sync", connectionId: "conn-123", onSynced });
@@ -280,22 +289,24 @@ describe("WebSessionBrowserSignIn", () => {
       container?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const loginCall = fetchMock.mock.calls.find(
-      (call) => (call as [string])[0] === "/api/providers/conn-123/login"
-    );
-    expect(loginCall).toBeTruthy();
-    const [, init] = loginCall as [string, RequestInit];
-    // The browser family travels with the request so the sign-in window opens
-    // in the browser the operator is using.
-    expect(JSON.parse(String(init.body))).toMatchObject({ browser: expect.any(String) });
+    // The sign-in tab re-syncs the given connection.
+    const [url] = open.mock.calls[0] as [string];
+    expect(url).toContain("mode=sync");
+    expect(url).toContain("connectionId=conn-123");
+
+    await act(async () => {
+      postSigninResult({ success: true, alreadySignedIn: true });
+    });
+
     expect(onSynced).toHaveBeenCalledWith({ alreadySignedIn: true });
   });
 
   it("surfaces the server error instead of failing silently", async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json({ success: false, error: "Login timed out" }, { status: 400 })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ok: true }))
     );
-    vi.stubGlobal("fetch", fetchMock);
+    stubTab();
 
     const onCaptured = vi.fn();
     const rendered = render({ onCaptured });
@@ -304,6 +315,10 @@ describe("WebSessionBrowserSignIn", () => {
 
     await act(async () => {
       container?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await act(async () => {
+      postSigninResult({ success: false, error: "Login timed out" });
     });
 
     expect(container?.textContent).toContain("Login timed out");

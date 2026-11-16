@@ -38,18 +38,28 @@ const ORIGINAL_DATA_DIR = process.env.DATA_DIR;
 process.env.DATA_DIR = TEST_DATA_DIR;
 process.env.API_KEY_SECRET = process.env.API_KEY_SECRET || "web-session-capture-test-secret";
 
+// The route decides WHERE the sign-in appears: a window on the host (the
+// dashboard is open on the host AND the host has a display) or the streamed
+// view (otherwise). These tests drive the window-on-the-host path, so the
+// host must look like it has a display — the CI runners have none.
+const ORIGINAL_DISPLAY = process.env.DISPLAY;
+process.env.DISPLAY = process.env.DISPLAY || ":99";
+
 const core = await import("../../src/lib/db/core.ts");
 const providersDb = await import("../../src/lib/db/providers.ts");
 const loginRoute = await import("../../src/app/api/providers/[id]/login/route.ts");
 const captureRoute = await import("../../src/app/api/providers/web-session-login/route.ts");
 const { inAppLoginService } = await import("../../open-sse/services/inAppLoginService.ts");
 const { capturedSessionProbe } = await import("../../src/lib/providers/webSessionCapture.ts");
+const { AUTHZ_HEADER_PEER_LOCALITY } = await import("../../src/server/authz/headers.ts");
 
 test.after(() => {
   core.resetDbInstance();
   fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   if (ORIGINAL_DATA_DIR === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = ORIGINAL_DATA_DIR;
+  if (ORIGINAL_DISPLAY === undefined) delete process.env.DISPLAY;
+  else process.env.DISPLAY = ORIGINAL_DISPLAY;
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -355,4 +365,64 @@ test("login keeps a re-synced session the probe cannot rule out", async () => {
 
   const stored = (await providersDb.getProviderConnectionById(id)) as Record<string, unknown>;
   assert.equal(stored.apiKey, "sessionKey=fresh");
+});
+
+// ── A re-sync from another machine — the streamed sign-in ────────────────────
+
+test("a re-sync from another machine streams the sign-in and stores the capture", async () => {
+  // The dashboard is open on ANOTHER machine: a window on the OmniRoute host
+  // would be invisible to the operator, so the sign-in is streamed into their
+  // screen. The capture still has to end up on the connection — the operator
+  // never handles the credential.
+  const id = await makeConnection("claude-web");
+
+  // A Host that is not this host → the dashboard is somewhere else. Such a
+  // request is not a loopback caller, so it has to authenticate.
+  const apiKeysDb = await import("../../src/lib/db/apiKeys.ts");
+  const managementKey = await apiKeysDb.createApiKey("streamed re-sync", "test-machine", [
+    "manage",
+  ]);
+
+  const remoteRequest = new Request("http://dashboard.example.com/api/providers/x/login", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${managementKey.key}`,
+      // The trusted locality verdict the authz pipeline stamps on every
+      // request: this one arrived from another machine.
+      [AUTHZ_HEADER_PEER_LOCALITY]: "remote",
+    },
+    body: JSON.stringify({}),
+  }) as unknown as NextRequest;
+
+  await withStubbedLogin(
+    {
+      success: true,
+      credentials: { sessionKey: "streamed" },
+      cookies: [{ name: "sessionKey", value: "streamed" }],
+    },
+    async () => {
+      const res = await loginRoute.POST(remoteRequest, {
+        params: Promise.resolve({ id }),
+      });
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as { success: boolean; mode?: string; sessionId?: string };
+      assert.equal(body.success, true);
+      assert.equal(body.mode, "stream");
+      assert.ok(body.sessionId, "the streamed session must carry an id");
+    }
+  );
+
+  // The capture is stored when the streamed sign-in finishes.
+  const deadline = Date.now() + 5_000;
+  let stored: Record<string, unknown> = {};
+  while (Date.now() < deadline) {
+    stored = (await providersDb.getProviderConnectionById(id)) as Record<string, unknown>;
+    if (stored.apiKey === "sessionKey=streamed") break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  assert.equal(stored.apiKey, "sessionKey=streamed");
+  const psd = stored.providerSpecificData as Record<string, unknown>;
+  assert.equal(psd.cookie, "sessionKey=streamed");
 });

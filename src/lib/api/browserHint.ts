@@ -26,10 +26,7 @@
 
 import os from "node:os";
 
-import {
-  AUTHZ_HEADER_PEER_LOCALITY,
-  AUTHZ_HEADER_TRUSTED_PEER_IP,
-} from "@/server/authz/headers";
+import { AUTHZ_HEADER_PEER_LOCALITY, AUTHZ_HEADER_TRUSTED_PEER_IP } from "@/server/authz/headers";
 import { isLoopbackHost } from "@/server/authz/routeGuard";
 import type { BrowserFamily } from "@/shared/providers/browserFamily";
 
@@ -51,6 +48,71 @@ function isHostOwnAddress(ip: string): boolean {
 }
 
 /**
+ * Where is the dashboard that is asking?
+ *
+ * "host" means the operator is looking at the OmniRoute host itself — the
+ * browser on their screen and the server are the same machine, so a window
+ * opened by the host lands in front of them. "remote" means the dashboard is
+ * served to another machine; a window opened by the host would be invisible
+ * to them.
+ */
+export type DashboardLocality = "host" | "remote";
+
+/**
+ * Is the dashboard open on the OmniRoute host itself?
+ *
+ * The signal is the authz pipeline's trusted locality verdict
+ * (`AUTHZ_HEADER_PEER_LOCALITY`) and the trusted peer IP it forwards
+ * (`AUTHZ_HEADER_TRUSTED_PEER_IP`). Both are stripped from client input and
+ * re-set by the pipeline from the real TCP peer, so a client cannot forge
+ * them. The Host header is only a fallback for callers that carry no trusted
+ * header at all (direct Node calls, tests).
+ */
+export function resolveDashboardLocality(request: Request): DashboardLocality {
+  // 1. The trusted locality verdict from the authz pipeline.
+  const locality = request.headers.get(AUTHZ_HEADER_PEER_LOCALITY);
+  if (locality) {
+    if (locality === "loopback") return "host";
+    // A same-machine request that went through the machine's own LAN address
+    // arrives from that address — the trusted peer IP tells it apart from a
+    // real remote machine on the same network.
+    const trustedPeerIp = request.headers.get(AUTHZ_HEADER_TRUSTED_PEER_IP);
+    if (trustedPeerIp && isHostOwnAddress(trustedPeerIp)) return "host";
+    return "remote";
+  }
+
+  // 2. No trusted verdict (direct Node call, tests): fall back to the Host
+  //    header. Spoofable — a UI hint only, never a security decision.
+  const hostHeader = request.headers.get("host");
+  if (hostHeader == null) return "host";
+  return isLoopbackHost(hostHeader) ? "host" : "remote";
+}
+
+/**
+ * Where the sign-in window has to appear.
+ *
+ *  - `native` — a browser window opens on the OmniRoute host, in front of the
+ *    operator. Only possible when their dashboard runs on that same machine
+ *    AND the host has a display.
+ *  - `streamed` — the host runs the browser without a display and streams the
+ *    view into the dashboard, so the operator signs in on their own screen
+ *    wherever they are.
+ */
+export type SignInMode = "native" | "streamed";
+
+/**
+ * Decide how the sign-in window is shown.
+ *
+ * @param request - the sign-in request (its trusted peer decides where the
+ *   dashboard is open).
+ * @param displayAvailable - whether the OmniRoute host has a display.
+ */
+export function resolveSignInMode(request: Request, displayAvailable: boolean): SignInMode {
+  if (!displayAvailable) return "streamed";
+  return resolveDashboardLocality(request) === "host" ? "native" : "streamed";
+}
+
+/**
  * The browser family to honour for a sign-in request.
  *
  * Returns `"unknown"` — meaning "no preference, use the host's default" —
@@ -61,22 +123,5 @@ export function resolveBrowserHintForRequest(
   requested: BrowserFamily
 ): BrowserFamily {
   if (!requested || requested === "unknown") return "unknown";
-
-  // 1. The trusted locality verdict from the authz pipeline.
-  const locality = request.headers.get(AUTHZ_HEADER_PEER_LOCALITY);
-  if (locality) {
-    if (locality === "loopback") return requested;
-    // A same-machine request that went through the machine's own LAN address
-    // arrives from that address — the trusted peer IP tells it apart from a
-    // real remote machine on the same network.
-    const trustedPeerIp = request.headers.get(AUTHZ_HEADER_TRUSTED_PEER_IP);
-    if (trustedPeerIp && isHostOwnAddress(trustedPeerIp)) return requested;
-    return "unknown";
-  }
-
-  // 2. No trusted verdict (direct Node call, tests): fall back to the Host
-  //    header. Spoofable — a UI hint only, never a security decision.
-  const hostHeader = request.headers.get("host");
-  if (hostHeader == null) return requested;
-  return isLoopbackHost(hostHeader) ? requested : "unknown";
+  return resolveDashboardLocality(request) === "host" ? requested : "unknown";
 }

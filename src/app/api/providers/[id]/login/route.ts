@@ -9,12 +9,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedProviderConnectionById } from "@/lib/db/readCache";
 import { updateProviderConnection } from "@/lib/db/providers";
-import { parseProviderSpecificData } from "@/lib/db/webSessionDedup";
-import { buildWebSessionCredentialPayload } from "@/lib/providers/webSessionCredentialPayload";
 import { requireManagementAuth } from "@/lib/api/requireManagementAuth";
 import { clampLoginTimeoutMs } from "@/lib/api/loginTimeout";
 import { normalizeBrowserFamily } from "@/shared/providers/browserFamily";
-import { resolveBrowserHintForRequest } from "@/lib/api/browserHint";
+import { resolveBrowserHintForRequest, resolveSignInMode } from "@/lib/api/browserHint";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error.ts";
 
 const ADOBE_FIREFLY_SLUGS = new Set(["adobe-firefly", "firefly"]);
@@ -388,93 +386,76 @@ export async function POST(
     // TOKEN_EXTRACTION_CONFIGS can find the extraction config.
     // Bug: the previous code passed `id` (connection UUID), so the lookup always
     // missed and returned "No extraction config" without launching a browser.
-    const { inAppLoginService } = await import("@omniroute/open-sse/services/inAppLoginService.ts");
+    const { inAppLoginService, hostHasDisplay } =
+      await import("@omniroute/open-sse/services/inAppLoginService.ts");
+    const { persistWebSessionCapture, WebSessionCaptureError } =
+      await import("@/lib/providers/webSessionPersistCapture");
 
-    const result = await inAppLoginService.startLogin(providerSlug || id, {
-      timeout: clampLoginTimeoutMs(body.timeout),
-      // The dashboard reports the browser it detected in its own user agent,
-      // so the sign-in window opens in the browser the operator is using —
-      // but only when the dashboard is open on this very host.
-      browser: resolveBrowserHintForRequest(req, normalizeBrowserFamily(body.browser)),
-    });
+    const timeout = clampLoginTimeoutMs(body.timeout);
+    // The dashboard reports the browser it detected in its own user agent,
+    // so the sign-in window opens in the browser the operator is using —
+    // but only when the dashboard is open on this very host.
+    const browser = resolveBrowserHintForRequest(req, normalizeBrowserFamily(body.browser));
+    const providerId = providerSlug || id;
+
+    // Where does the window have to appear? In front of the operator.
+    //
+    //  - The dashboard is open on another machine → a window on this host
+    //    would be invisible to them, so the view is streamed into the
+    //    dashboard instead.
+    //  - This host has no display → same thing; a window cannot open at all.
+    const streamed = resolveSignInMode(req, hostHasDisplay()) === "streamed";
+
+    if (streamed) {
+      const { startStreamedLogin } =
+        await import("@omniroute/open-sse/services/webSessionStreamService.ts");
+      const { sessionId } = await startStreamedLogin(providerId, {
+        timeout,
+        browser,
+        // The capture is stored straight onto the connection when the sign-in
+        // finishes — the operator never handles the credential.
+        onComplete: async (result) => {
+          await persistWebSessionCapture({ connectionId: id, provider: providerId, result });
+        },
+      });
+      return NextResponse.json({
+        success: true,
+        mode: "stream",
+        sessionId,
+        provider: providerId,
+      });
+    }
+
+    const result = await inAppLoginService.startLogin(providerId, { timeout, browser });
 
     // Persist credentials if extraction succeeded
     if (result.success) {
-      if (!result.credentials) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "The browser session did not yield a usable credential. Sign in again and retry.",
-          },
-          { status: 400 }
-        );
-      }
-
-      // Build the canonical payload the executors actually read. Storing the
-      // raw extraction map instead (apiKey = JSON.stringify(credentials)) made
-      // a successful capture unusable: perplexity-web and grok-web read
-      // `credentials.apiKey` as a Cookie header, and claude-web reads
-      // `providerSpecificData.cookie` — neither can parse a JSON blob.
-      const payload = buildWebSessionCredentialPayload({
-        providerId: providerSlug || id,
-        extracted: result.credentials,
-        cookies: result.cookies,
-      });
-
-      if (!payload.credential) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "The browser session did not yield a usable credential for this provider. Sign in again and retry.",
-          },
-          { status: 400 }
-        );
-      }
-
-      // A re-sync that reused the saved browser profile can hand back a
-      // session the provider has since invalidated. Probe it before storing it,
-      // and drop the stale profile so the next attempt asks for a real sign-in
-      // instead of re-storing the same dead credential.
-      if (result.alreadySignedIn) {
-        const { capturedSessionProbe } = await import("@/lib/providers/webSessionCapture");
-        const validation = await capturedSessionProbe.validate(providerSlug || id, payload);
-        if (validation.expired) {
-          const { clearBrowserProfile } =
-            await import("@omniroute/open-sse/services/inAppLoginService.ts");
-          clearBrowserProfile(providerSlug || id);
-          return NextResponse.json(
-            {
-              success: false,
-              error:
-                "The saved browser session for this provider has expired. Run the sign-in again to refresh it.",
-            },
-            { status: 400 }
-          );
-        }
-      }
-
       try {
-        // Merge into the existing providerSpecificData: the captured session
-        // must not wipe settings the operator configured on this connection
-        // (custom user agent, proxy, quota thresholds, ...).
-        const existing = parseProviderSpecificData(
-          (provider as Record<string, unknown>).providerSpecificData
-        );
-        await updateProviderConnection(id, {
-          apiKey: payload.apiKey,
-          providerSpecificData: { ...(existing ?? {}), ...payload.providerSpecificData },
+        // The canonical payload the executors actually read is built and
+        // stored in one place (see webSessionPersistCapture): storing the raw
+        // extraction map instead (apiKey = JSON.stringify(credentials)) made a
+        // successful capture unusable — perplexity-web and grok-web read
+        // `credentials.apiKey` as a Cookie header, and claude-web reads
+        // `providerSpecificData.cookie` — neither can parse a JSON blob.
+        const persisted = await persistWebSessionCapture({
+          connectionId: id,
+          provider: providerId,
+          result,
         });
 
         return NextResponse.json({
           success: true,
           persisted: true,
-          alreadySignedIn: result.alreadySignedIn === true,
+          alreadySignedIn: persisted.alreadySignedIn,
         });
       } catch (err) {
         // Hard Rule #12: never put raw err.message/stack in a response body.
         const msg = sanitizeErrorMessage(err instanceof Error ? err.message : err);
+        // A capture that cannot be used is the operator's problem to fix
+        // (sign in again) — that is a 400, not a server error.
+        if (err instanceof WebSessionCaptureError) {
+          return NextResponse.json({ success: false, error: msg }, { status: 400 });
+        }
         return NextResponse.json(
           { success: false, error: `Extracted but failed to persist: ${msg}` },
           { status: 500 }

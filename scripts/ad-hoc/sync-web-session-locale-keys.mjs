@@ -42,6 +42,18 @@ const KEYS = [
   "webSessionBrowserOpens",
   "webSessionBrowserRunning",
   "webSessionBrowserDownload",
+  "webSessionBrowserSignInBodyRemote",
+  "webSessionStreamStarting",
+  "webSessionStreamFrameAlt",
+  "webSessionStreamWaiting",
+  "webSessionStreamHint",
+  "webSessionSigninTabBlocked",
+  "webSessionSigninTabClosed",
+  "webSessionSigninTitle",
+  "webSessionSigninNativeHint",
+  "webSessionSigninStreamHint",
+  "webSessionSigninDone",
+  "webSessionSigninFailed",
 ];
 
 /**
@@ -52,7 +64,7 @@ const KEYS = [
 const VIETNAMESE = {
   webSessionBrowserSignInTitle: "Đăng nhập vào {provider} trong trình duyệt",
   webSessionBrowserSignInBody:
-    "Một cửa sổ trình duyệt sẽ mở trên máy này. Hãy đăng nhập vào {provider} tại đó và OmniRoute sẽ tự thu thập phiên cho bạn — không cần sao chép cookie từ DevTools.",
+    "Một tab mới sẽ mở trong trình duyệt này và cửa sổ đăng nhập sẽ xuất hiện trên máy này. Hãy đăng nhập vào {provider} tại đó và OmniRoute sẽ tự thu thập phiên cho bạn — không cần sao chép cookie từ DevTools.",
   webSessionBrowserSignInButton: "Đăng nhập bằng trình duyệt",
   webSessionBrowserSignInWaiting: "Đang chờ đăng nhập…",
   webSessionBrowserSignInFailed:
@@ -69,10 +81,26 @@ const VIETNAMESE = {
   webSessionManualGuideShow: "Dán thủ công — cách lấy thông tin xác thực phiên",
   webSessionManualGuideHide: "Ẩn hướng dẫn thủ công",
   webSessionBrowserOpens: "Mở trong {browser}.",
-  webSessionBrowserRunning:
-    "Dùng {browser} đang chạy — bạn đã đăng nhập ở đó rồi.",
+  webSessionBrowserRunning: "Dùng {browser} đang chạy — bạn đã đăng nhập ở đó rồi.",
   webSessionBrowserDownload:
     "Máy chủ OmniRoute sẽ tải nó ở lần đăng nhập đầu tiên — bạn không cần cài đặt gì.",
+  webSessionBrowserSignInBodyRemote:
+    "Một tab mới sẽ mở trong trình duyệt này với trang đăng nhập hiển thị trực tiếp từ máy chủ OmniRoute, nên bạn đăng nhập trên màn hình này ngay cả khi OmniRoute chạy trên máy khác.",
+  webSessionStreamStarting: "Đang mở trang đăng nhập…",
+  webSessionStreamFrameAlt: "Trang đăng nhập {provider}, hiển thị trực tiếp từ máy chủ OmniRoute.",
+  webSessionStreamWaiting: "Đang mở trang đăng nhập…",
+  webSessionStreamHint:
+    "Bấm vào trang để lấy tiêu điểm, rồi gõ — phím bạn gõ sẽ được gửi tới biểu mẫu đăng nhập.",
+  webSessionSigninTabBlocked:
+    "Trình duyệt của bạn đã chặn tab đăng nhập. Hãy cho phép cửa sổ bật lên cho trang này rồi thử lại.",
+  webSessionSigninTabClosed: "Tab đăng nhập đã bị đóng trước khi phiên được thu thập. Hãy thử lại.",
+  webSessionSigninTitle: "Đăng nhập vào {provider}",
+  webSessionSigninNativeHint:
+    "Một cửa sổ đăng nhập đã mở trên máy chủ OmniRoute. Hãy đăng nhập tại đó — tab này sẽ tự đóng khi phiên được thu thập.",
+  webSessionSigninStreamHint:
+    "Trang đăng nhập được hiển thị bên dưới, trực tiếp từ máy chủ OmniRoute. Hãy bấm vào đó và gõ — phím bạn gõ sẽ được gửi tới biểu mẫu đăng nhập.",
+  webSessionSigninDone: "Xong — phiên đã được thu thập. Bạn có thể đóng tab này.",
+  webSessionSigninFailed: "Đăng nhập chưa hoàn tất.",
 };
 
 const en = JSON.parse(await fs.readFile(path.join(MESSAGES, "en.json"), "utf8"));
