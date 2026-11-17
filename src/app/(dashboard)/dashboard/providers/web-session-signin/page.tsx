@@ -138,9 +138,16 @@ export default function WebSessionSigninPage() {
       });
 
       source.addEventListener("error", (event) => {
+        // The server sends its own errors with a message. The browser's native
+        // error event (a dropped connection) carries no data — EventSource
+        // reconnects by itself, and the sign-in on the host is still running,
+        // so it must not be reported as a failure.
+        const raw = (event as MessageEvent).data;
+        if (typeof raw !== "string" || !raw) return;
+
         let message = "";
         try {
-          const parsed = JSON.parse((event as MessageEvent).data) as { message?: string };
+          const parsed = JSON.parse(raw) as { message?: string };
           message = parsed?.message ?? "";
         } catch {
           message = "";

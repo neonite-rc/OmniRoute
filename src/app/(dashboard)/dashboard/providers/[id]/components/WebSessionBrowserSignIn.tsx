@@ -232,15 +232,28 @@ export default function WebSessionBrowserSignIn({
         return;
       }
 
-      if (mode === "sync") {
-        setPhase("saving");
-        await onSynced?.({ alreadySignedIn: result.alreadySignedIn === true });
-        setPhase("idle");
-        return;
-      }
+      try {
+        if (mode === "sync") {
+          setPhase("saving");
+          await onSynced?.({ alreadySignedIn: result.alreadySignedIn === true });
+          setPhase("idle");
+          return;
+        }
 
-      await applyCapturedSession(result);
-      setPhase("idle");
+        await applyCapturedSession(result);
+        setPhase("idle");
+      } catch {
+        // Saving the connection failed — say so instead of leaving the button
+        // spinning forever.
+        setError(
+          providerText(
+            t,
+            "webSessionBrowserSignInFailed",
+            "Browser sign-in did not complete. Try again, or paste the credential manually."
+          )
+        );
+        setPhase("idle");
+      }
     },
     [mode, onSynced, applyCapturedSession, t]
   );

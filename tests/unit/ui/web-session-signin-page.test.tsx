@@ -52,6 +52,16 @@ class FakeEventSource {
       listener(new MessageEvent(type, { data: JSON.stringify(data) }));
     }
   }
+
+  /**
+   * The browser's own error event: a dropped connection, with no payload.
+   * EventSource reconnects by itself after this one.
+   */
+  emitDropped() {
+    for (const listener of this.listeners.get("error") ?? []) {
+      listener(new Event("error") as MessageEvent);
+    }
+  }
 }
 
 describe("the web-session sign-in tab", () => {
@@ -216,5 +226,21 @@ describe("the web-session sign-in tab", () => {
     const [payload] = postMessage.mock.calls[0] as [{ success: boolean; error?: string }];
     expect(payload.success).toBe(false);
     expect(payload.error).toBe("Login timed out");
+  });
+
+  it("keeps waiting when the connection drops — the browser reconnects by itself", async () => {
+    vi.stubGlobal("fetch", streamedFetch());
+    vi.stubGlobal("EventSource", FakeEventSource);
+
+    await render();
+
+    await act(async () => {
+      FakeEventSource.instances[0].emitDropped();
+    });
+
+    // The sign-in on the host is still running — a dropped frame stream is
+    // not a failed sign-in.
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(FakeEventSource.instances[0].closed).toBe(false);
   });
 });
