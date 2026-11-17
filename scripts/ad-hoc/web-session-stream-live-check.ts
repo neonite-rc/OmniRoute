@@ -22,7 +22,14 @@
 
 import { AUTHZ_HEADER_PEER_LOCALITY } from "../../src/server/authz/headers.ts";
 
-const BASE = "http://127.0.0.1:20129";
+/**
+ * The base URL the synthetic requests carry.
+ *
+ * It is only the URL of the `Request` objects — the route handlers are called
+ * in-process — so it does not have to be reachable. It points at the dev
+ * server by default so the log lines look like the real ones.
+ */
+const BASE = process.env.OMNIROUTE_TEST_BASE_URL ?? "http://127.0.0.1:20128";
 
 /**
  * A manage-scoped API key. The request below looks like it came from another

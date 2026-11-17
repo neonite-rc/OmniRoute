@@ -324,4 +324,37 @@ describe("WebSessionBrowserSignIn", () => {
     expect(container?.textContent).toContain("Login timed out");
     expect(onCaptured).not.toHaveBeenCalled();
   });
+
+  it("says so when saving the captured session fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ok: true }))
+    );
+    stubTab();
+
+    const onCaptured = vi.fn(async () => {
+      throw new Error("the database is locked");
+    });
+    const rendered = render({ onCaptured });
+    container = rendered.container;
+    root = rendered.root;
+
+    await act(async () => {
+      container?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await act(async () => {
+      postSigninResult({
+        success: true,
+        credential: "sessionKey=abc",
+        providerSpecificData: { cookie: "sessionKey=abc" },
+        alreadySignedIn: false,
+      });
+    });
+
+    // The panel does not spin forever — it says the sign-in failed.
+    expect(container?.textContent).toContain("Browser sign-in did not complete");
+    const button = container?.querySelector("button") as HTMLButtonElement | null;
+    expect(button?.disabled).toBe(false);
+  });
 });
