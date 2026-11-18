@@ -7,6 +7,7 @@ import { extractZaiToken } from "@omniroute/open-sse/executors/zai-web.ts";
 import { normalizeBaseUrl } from "./urlHelpers";
 import { STANDARD_USER_AGENT, buildBearerHeaders } from "./headers";
 import { validateChatGptWebProvider } from "./chatgptWeb";
+import { detectCaptchaInBody } from "@omniroute/open-sse/services/webSessionCaptcha.ts";
 import {
   validationRead,
   toValidationErrorResult,
@@ -16,6 +17,22 @@ import {
 } from "./transport";
 
 const UNSUPPORTED = { valid: false, error: "Provider validation not supported", unsupported: true };
+
+/**
+ * Whether a rejected probe was a bot challenge rather than a dead session.
+ *
+ * Only the body is inspected (a bounded slice) — a normal auth rejection
+ * carries an API error, never a challenge page.
+ */
+async function isChallengeBlockedResponse(res: Response): Promise<boolean> {
+  try {
+    const body = await res.text();
+    return detectCaptchaInBody(body) !== null;
+  } catch {
+    // A body that cannot be read is not evidence of a challenge.
+    return false;
+  }
+}
 
 /**
  * Decide whether `provider` can be probed at all, and with what URL/headers.
@@ -129,11 +146,18 @@ export async function validateWebCookieProvider({
     );
 
     if (res.status === 401 || res.status === 403) {
+      // A 403 is not always a dead session. Providers behind Cloudflare,
+      // Turnstile or a similar anti-bot layer answer a probe with 403 and a
+      // challenge page — the session behind it may still be perfectly alive.
+      // The caller uses `challengeBlocked` to keep the saved browser profile
+      // instead of wiping a working sign-in.
+      const challengeBlocked = await isChallengeBlockedResponse(res);
       return {
         valid: false,
         error: "SESSION_EXPIRED",
         errorCode: "AUTH_007",
         unsupported: false,
+        ...(challengeBlocked ? { challengeBlocked: true } : {}),
       };
     }
 

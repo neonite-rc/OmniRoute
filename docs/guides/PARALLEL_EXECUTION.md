@@ -268,12 +268,12 @@ OMNIROUTE_CHAT_ADMISSION_MAX_QUEUED_BYTES=16777216  # 16 MB parked-body budget
 
 Guidance:
 
-- Set `MAX_HEAVY_IN_FLIGHT` to your **active agent count** (main + subagents).
-  The auto-derived byte budget and the heap-pressure shed (0.75 ratio) stay in
-  force underneath — this is a bounded count profile, not "use the host".
-  Raising it costs heap residency for each request's whole lifetime.
-- Prefer widening `QUEUE_MS` over raising the count when bursts are short:
-  waiting costs latency, not memory.
+- Set `OMNIROUTE_CHAT_MAX_HEAVY_IN_FLIGHT` to your **active agent count** (main
+  + subagents). The auto-derived byte budget and the heap-pressure shed (0.75
+  ratio) stay in force underneath — this is a bounded count profile, not "use
+  the host". Raising it costs heap residency for each request's whole lifetime.
+- Prefer widening `OMNIROUTE_CHAT_ADMISSION_QUEUE_MS` over raising the count
+  when bursts are short: waiting costs latency, not memory.
 - Monitor `chatAdmission.*` at `/api/monitoring/health` when tuning.
 
 ### Proxy dispatcher concurrency (transport)

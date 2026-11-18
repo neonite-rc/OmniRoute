@@ -90,8 +90,31 @@ describe("web-cookie health probe (#11488)", () => {
     assert.equal(persisted!.lastErrorSource, "webcookie");
   });
 
-  it("unsupported providers are stamped without any state flip", async () => {
+  it("a bot challenge keeps the session — it is not an expiry", async () => {
+    // The upstream answered 403 with a challenge page. The cookie behind it
+    // may still be valid, so the sweep must NOT terminal-state the
+    // connection — that would kill a working session over a challenge the
+    // operator can solve.
     let persisted: Record<string, unknown> | null = null;
+    await checkWebCookieConnectionIfNeeded(
+      baseParams({
+        probeFn: async () => ({
+          valid: false,
+          error: "SESSION_EXPIRED",
+          errorCode: "AUTH_007",
+          unsupported: false,
+          challengeBlocked: true,
+        }),
+        persistFn: async (_id, data) => {
+          persisted = data as Record<string, unknown>;
+          return {};
+        },
+      })
+    );
+    assert.deepEqual(persisted, { lastHealthCheckAt: NOW });
+  });
+
+  it("unsupported providers are stamped without any state flip", async () => {    let persisted: Record<string, unknown> | null = null;
     await checkWebCookieConnectionIfNeeded(
       baseParams({
         conn: {

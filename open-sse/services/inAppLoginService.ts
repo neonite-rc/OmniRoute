@@ -25,6 +25,11 @@ import {
 import { matchesCookieDomain } from "../utils/cookieDomain";
 import { resolveDataDir } from "@/lib/dataPaths";
 import {
+  describeCaptchaBlock,
+  detectCaptchaOnPage,
+  type CaptchaMatch,
+} from "./webSessionCaptcha";
+import {
   resolveBrowserForFamily,
   resolvePreferredSystemBrowser,
   type BrowserEngine,
@@ -56,6 +61,14 @@ export interface LoginResult {
    */
   alreadySignedIn?: boolean;
   error?: string;
+  /**
+   * A stable machine-readable reason for the failure.
+   *
+   * `captcha_required` — a captcha / anti-bot challenge stood in front of the
+   * sign-in. The dashboard turns this into a one-time prompt when the
+   * challenge keeps coming back.
+   */
+  errorCode?: string;
 }
 
 interface ActiveLogin {
@@ -973,6 +986,12 @@ export class InAppLoginService extends EventEmitter {
       // Poll for success URL + token extraction
       const maxPolls = Math.floor(maxTimeout / pollInterval);
       const startTime = Date.now();
+      // A captcha in front of the login does not fail the flow — the operator
+      // solves it in the sign-in window and the poll continues. It is tracked
+      // so a timeout can say what really happened, and so the dashboard can
+      // raise a prompt when the challenge keeps coming back.
+      let captchaSeen: CaptchaMatch | null = null;
+      let captchaReported = false;
 
       for (let i = 0; i < maxPolls; i++) {
         if (this.activeLogin?.aborted) {
@@ -1082,7 +1101,36 @@ export class InAppLoginService extends EventEmitter {
           }
         }
 
+        // Look for a captcha / anti-bot interstitial while we wait. Checked
+        // every third poll — the page is cheap to read, but there is no point
+        // inspecting it once per second for five minutes.
+        if (!captchaSeen && i % 3 === 0) {
+          const challenge = await detectCaptchaOnPage(page);
+          if (challenge) {
+            captchaSeen = challenge;
+            if (!captchaReported) {
+              captchaReported = true;
+              this.emit("status", {
+                providerId,
+                status: "waiting",
+                message: describeCaptchaBlock(challenge),
+              });
+            }
+          }
+        }
+
         await sleep(pollInterval);
+      }
+
+      // The poll ran out of time. If a challenge stood in the way, say so —
+      // "Login timed out" alone sends the operator hunting for the wrong
+      // problem.
+      if (captchaSeen) {
+        return {
+          success: false,
+          error: `${describeCaptchaBlock(captchaSeen)} The sign-in was not completed in time.`,
+          errorCode: "captcha_required",
+        };
       }
 
       return { success: false, error: "Login timed out" };

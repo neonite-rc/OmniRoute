@@ -22,7 +22,7 @@
  *   { type: "status", message }                  — human-readable progress
  *   { type: "frame", data, width, height }       — a JPEG screenshot (base64)
  *   { type: "result", result }                   — the captured session
- *   { type: "error", message }                   — the sign-in failed
+ *   { type: "error", message, errorCode? }       — the sign-in failed
  */
 
 import { randomUUID } from "node:crypto";
@@ -43,7 +43,7 @@ export type StreamEvent =
   | { type: "status"; message: string }
   | { type: "frame"; data: string; width: number; height: number }
   | { type: "result"; result: LoginResult }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; errorCode?: string };
 
 export type StreamListener = (event: StreamEvent) => void;
 
@@ -120,7 +120,13 @@ export function completeStreamedSession(sessionId: string, result: LoginResult):
     emit(session, { type: "result", result });
   } else {
     session.error = result.error || "Sign-in did not complete";
-    emit(session, { type: "error", message: session.error });
+    // The error code travels with the event so the route can tell a captcha
+    // block from any other failure and record it as a persistent problem.
+    emit(session, {
+      type: "error",
+      message: session.error,
+      ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+    });
   }
   scheduleCleanup(session);
 }

@@ -15,6 +15,15 @@ export interface CapturedSessionValidation {
   valid: boolean;
   /** True only when the provider answered 401/403 — a definitive "signed out". */
   expired: boolean;
+  /**
+   * True when the provider refused the probe with an anti-bot challenge
+   * (Cloudflare, Turnstile, …) instead of an auth rejection.
+   *
+   * The session behind the challenge may still be alive, so the saved browser
+   * profile is KEPT — wiping it would throw away a working sign-in over a
+   * challenge the operator can solve.
+   */
+  challengeBlocked?: boolean;
 }
 
 /** The shape of a provider-validation result that matters for a captured session. */
@@ -23,6 +32,8 @@ export interface CapturedSessionProbeResult {
   error?: string | null;
   errorCode?: string | null;
   unsupported?: boolean;
+  /** Set by the validator when the rejection was a bot challenge, not an auth failure. */
+  challengeBlocked?: boolean;
 }
 
 /**
@@ -33,10 +44,17 @@ export interface CapturedSessionProbeResult {
  * status is inconclusive and MUST NOT be treated as an expired session —
  * clearing the browser profile on an inconclusive probe would throw away a
  * working sign-in.
+ *
+ * A challenge-blocked rejection is ALSO not an expiry: the provider answered
+ * with a bot challenge, so the session behind it is still usable once the
+ * challenge is solved.
  */
 export function interpretCapturedSessionProbe(
   result: CapturedSessionProbeResult | null | undefined
 ): CapturedSessionValidation {
+  if (result?.challengeBlocked) {
+    return { valid: true, expired: false, challengeBlocked: true };
+  }
   const expired = result?.error === "SESSION_EXPIRED" || result?.errorCode === "AUTH_007";
   return { valid: !expired, expired };
 }

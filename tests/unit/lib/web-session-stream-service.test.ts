@@ -173,4 +173,22 @@ describe("webSessionStreamService", () => {
     await new Promise((resolve) => setTimeout(resolve, 600));
     assert.equal(fake.screenshots(), shotsAtFinish, "no frames after the sign-in finished");
   });
+
+  test("a captcha failure carries its error code to the subscriber", async () => {
+    // The route needs the code to record the captcha as a persistent problem
+    // instead of a generic sign-in failure.
+    const sessionId = createStreamedSession("claude-web");
+    const events: StreamEvent[] = [];
+    subscribeToStreamedLogin(sessionId, (event) => events.push(event));
+
+    completeStreamedSession(sessionId, {
+      success: false,
+      error: "A Cloudflare challenge is blocking the sign-in.",
+      errorCode: "captcha_required",
+    });
+
+    const failure = events.find((event) => event.type === "error");
+    assert.ok(failure, "the failure is delivered");
+    assert.equal(failure.type === "error" && failure.errorCode, "captcha_required");
+  });
 });

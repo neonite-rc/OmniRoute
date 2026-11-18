@@ -12,6 +12,7 @@ import { getDbInstance } from "../core";
 import { backupDbFile } from "../backup";
 import { cleanupComboConnectionRefs } from "../combos";
 import { deleteLKGPByConnectionIds } from "../settings/lkgp";
+import { deleteWebSessionIssuesForProvider } from "../webSessionIssues";
 import {
   removeConnectionHealth,
   removeConnectionIndex,
@@ -58,6 +59,23 @@ function _selectExistingConnectionIds(db: DbLike, ids: string[]): string[] {
     .filter((id): id is string => id !== null);
 }
 
+/** The provider slugs of the given connections — used to clear their prompts. */
+function _selectProviderIdsForConnections(db: DbLike, ids: string[]): string[] {
+  if (ids.length === 0) return [];
+
+  const placeholders = ids.map(() => "?").join(",");
+
+  return db
+    .prepare(`SELECT DISTINCT provider FROM provider_connections WHERE id IN (${placeholders})`)
+    .all(...ids)
+    .map((row) => {
+      const record = toRecord(row);
+      const provider = record.provider;
+      return typeof provider === "string" && provider ? provider : null;
+    })
+    .filter((provider): provider is string => provider !== null);
+}
+
 async function _cleanupDeletedComboConnectionRefs(connectionIds: string | string[]): Promise<void> {
   try {
     await cleanupComboConnectionRefs(connectionIds);
@@ -74,6 +92,23 @@ async function _cleanupDeletedLKGPConnectionRefs(connectionIds: string | string[
     await deleteLKGPByConnectionIds(ids);
   } catch (error) {
     console.error("Failed to clean up LKGP refs for deleted connections:", error);
+  }
+}
+
+/**
+ * Forget the web-session issues of a provider that is being removed.
+ *
+ * The rows carry the "your session expired" / "a captcha is blocking you"
+ * prompt. A provider the operator deleted has no session to fix, so its
+ * prompt must never appear again.
+ */
+function forgetProviderWebSessionIssues(providerId: string): void {
+  if (!providerId) return;
+  try {
+    deleteWebSessionIssuesForProvider(providerId);
+  } catch (error) {
+    // Never fail a deletion because the prompt bookkeeping failed.
+    console.error("Failed to clear web-session issues for removed provider:", error);
   }
 }
 
@@ -105,6 +140,8 @@ export async function deleteProviderConnection(id: string) {
     typeof existingRecord.provider === "string"
       ? existingRecord.provider
       : String(existingRecord.provider || "");
+  // A removed provider must never prompt about its session problems again.
+  forgetProviderWebSessionIssues(providerId);
   reorderConnections(db, providerId);
   backupDbFile("pre-write");
   invalidateDbCache("connections"); // Bust connections read cache
@@ -117,6 +154,7 @@ export async function deleteProviderConnections(ids: string[]): Promise<number> 
 
   const db = getDbInstance() as unknown as DbLike;
   const existingIds = _selectExistingConnectionIds(db, ids);
+  const affectedProviders = _selectProviderIdsForConnections(db, existingIds);
 
   const deletedCount = db.transaction(() => {
     const placeholders = ids.map(() => "?").join(",");
@@ -148,6 +186,9 @@ export async function deleteProviderConnections(ids: string[]): Promise<number> 
   backupDbFile("pre-write");
   invalidateDbCache("connections");
   invalidateReasoningRoutingRuleCache();
+
+  // A removed provider must never prompt about its session problems again.
+  for (const providerId of affectedProviders) forgetProviderWebSessionIssues(providerId);
 
   return deletedCount;
 }
@@ -189,6 +230,8 @@ export async function deleteProviderConnectionsByProvider(providerId: string) {
   backupDbFile("pre-write");
   invalidateDbCache("connections");
   invalidateReasoningRoutingRuleCache();
+  // A removed provider must never prompt about its session problems again.
+  forgetProviderWebSessionIssues(providerId);
   return result.changes;
 }
 
