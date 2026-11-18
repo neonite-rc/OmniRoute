@@ -18,6 +18,11 @@ import { updateProviderConnection } from "@/lib/db/providers";
 import { parseProviderSpecificData } from "@/lib/db/webSessionDedup";
 import { buildWebSessionCredentialPayload } from "@/lib/providers/webSessionCredentialPayload";
 import { capturedSessionProbe } from "@/lib/providers/webSessionCapture";
+import {
+  noteCaptchaBlocked,
+  noteSessionExpired,
+  noteSessionHealthy,
+} from "@/lib/providers/webSessionCaptureIssues";
 import { clearBrowserProfile } from "@omniroute/open-sse/services/inAppLoginService.ts";
 import type { LoginResult } from "@omniroute/open-sse/services/inAppLoginService.ts";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error.ts";
@@ -60,6 +65,11 @@ export async function persistWebSessionCapture(params: {
   const { connectionId, provider, result } = params;
 
   if (!result.success || !result.credentials) {
+    // A captcha that blocked the sign-in is recorded so the dashboard can
+    // prompt when it keeps coming back.
+    if (result.errorCode === "captcha_required") {
+      noteCaptchaBlocked(provider, result.error);
+    }
     // Hard Rule #12: the service's own error may still carry a raw
     // browser/Playwright dump — never ship it as-is.
     throw new WebSessionCaptureError(
@@ -84,7 +94,20 @@ export async function persistWebSessionCapture(params: {
   // the stale profile so the next attempt asks for a real sign-in.
   if (result.alreadySignedIn) {
     const validation = await capturedSessionProbe.validate(provider, payload);
+    if (validation.challengeBlocked) {
+      // A bot challenge is not an expiry: the saved profile is kept so the
+      // operator can solve the challenge and re-sync without signing in from
+      // scratch.
+      noteCaptchaBlocked(provider, "The provider refused the saved session with a bot challenge.");
+      throw new WebSessionCaptureError(
+        "The provider is currently blocking OmniRoute with a captcha / anti-bot challenge. " +
+          "Solve it in the sign-in window and run the sign-in again — the saved session was kept."
+      );
+    }
     if (validation.expired) {
+      // A definitive 401/403: the session really is dead, so the stale
+      // profile is dropped and the next attempt asks for a real sign-in.
+      noteSessionExpired(provider, "The provider rejected the saved browser session.");
       clearBrowserProfile(provider);
       throw new WebSessionCaptureError(
         "The saved browser session for this provider has expired. Run the sign-in again to refresh it."
@@ -104,6 +127,9 @@ export async function persistWebSessionCapture(params: {
     apiKey: payload.apiKey,
     providerSpecificData: { ...(existing ?? {}), ...payload.providerSpecificData },
   });
+
+  // The re-sync worked — any open problem for this provider is solved.
+  noteSessionHealthy(provider);
 
   return {
     alreadySignedIn: result.alreadySignedIn === true,

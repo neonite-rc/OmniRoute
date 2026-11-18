@@ -28,6 +28,7 @@
 import { NextRequest } from "next/server";
 import { requireManagementAuth } from "@/lib/api/requireManagementAuth";
 import { buildWebSessionCaptureResult } from "@/lib/providers/webSessionCaptureResult";
+import { noteCaptchaBlocked } from "@/lib/providers/webSessionCaptureIssues";
 import {
   cancelStreamedLogin,
   getStreamedSession,
@@ -128,6 +129,11 @@ export function createSignInEventStream(sessionId: string, request: Request): Re
           return;
         }
         if (event.type === "error") {
+          // A captcha that blocked the streamed sign-in is recorded, so the
+          // dashboard can prompt when it keeps coming back.
+          if (event.errorCode === "captcha_required") {
+            noteCaptchaBlocked(session.provider, event.message);
+          }
           write("error", event);
           finish();
           return;

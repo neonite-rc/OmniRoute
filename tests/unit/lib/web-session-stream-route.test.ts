@@ -109,6 +109,35 @@ describe("the streamed sign-in event stream", () => {
     assert.ok(events[0].includes("sessionKey=abc"), events[0]);
   });
 
+  test("records a captcha that blocked the streamed sign-in", async () => {
+    // The streamed sign-in is the remote-dashboard path, so this is where a
+    // captcha is most likely to be hit. The problem has to be recorded, or
+    // the dashboard never learns that it keeps happening.
+    const sessionId = createStreamedSession("claude-web");
+
+    const response = createSignInEventStream(sessionId, streamRequest(abortController!));
+
+    setTimeout(() => {
+      completeStreamedSession(sessionId, {
+        success: false,
+        error: "A Cloudflare challenge is blocking the sign-in.",
+        errorCode: "captcha_required",
+      });
+    }, 50);
+
+    const events = await readEvents(response, 1);
+    assert.equal(events.length, 1);
+    assert.ok(events[0].startsWith("event: error"), events[0]);
+
+    const issues = await import("../../../src/lib/providers/webSessionIssues.ts");
+    const open = issues.listWebSessionIssueAlerts();
+    assert.equal(open.length, 0, "one blocked attempt is a blip, not a prompt");
+
+    const stored = issues.getOpenWebSessionIssueForProvider("claude-web", "captcha_blocked");
+    assert.ok(stored, "the captcha is recorded");
+    assert.equal(stored.occurrences, 1);
+  });
+
   test("answers 404 for a session that is gone", async () => {
     const response = createSignInEventStream("not-a-session", streamRequest(abortController!));
     assert.equal(response.status, 404);
