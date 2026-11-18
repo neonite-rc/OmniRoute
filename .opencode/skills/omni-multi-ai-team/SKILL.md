@@ -1,5 +1,5 @@
 ---
-name: Omni Multi-AI Team
+name: omni-multi-ai-team
 description: Run work as a team of models through OmniRoute — fan out tasks to specialists in parallel, compose the result with a synthesizer, and know the real limits (workers in flight, admission gate, provider lanes, failure isolation). Use when a task should be split across several models/providers, when a swarm or fusion combo is involved, or when asked how many parallel calls OmniRoute can make.
 ---
 
