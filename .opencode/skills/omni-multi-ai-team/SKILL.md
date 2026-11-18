@@ -37,7 +37,7 @@ wave. Never run dependent work in parallel.
 | Workers in flight per request | `maxConcurrency`, **default 8** | `config.swarm.maxConcurrency`; hard cap `maxTasks` = 40 |
 | Tasks per run | **40** | `SWARM_DEFAULTS.maxTasks` — refused *before* fan-out (#1905 heap discipline) |
 | Heavy chat requests admitted at once | host-memory-derived byte budget | `OMNIROUTE_CHAT_MAX_INFLIGHT_BYTES`; otherwise a quarter of the memory ceiling ÷ 8 |
-| Concurrent tunnels through one proxy | **64** | `OMNIROUTE_PROXY_DISPATCHER_CONNECTIONS` |
+| Concurrent tunnels through one proxy | **32** by default, **64** in the shipped profile | `OMNIROUTE_PROXY_DISPATCHER_CONNECTIONS` (cap 256) |
 | Per provider/account | its own semaphore | the account lane — a panel is only as wide as its distinct providers |
 
 So the **effective width of one request** is
