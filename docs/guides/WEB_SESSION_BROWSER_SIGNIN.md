@@ -350,7 +350,10 @@ Sign out at the provider (or let the session expire), then click
 The stale browser profile is deleted, and the **dead credential is not
 re-stored** — the previous working value stays until a real sign-in replaces
 it. A probe that cannot reach the provider is treated as inconclusive and
-never invalidates a working session.
+never invalidates a working session. A probe that comes back with a **captcha
+/ anti-bot challenge** is treated the same way — the profile is kept, because
+the challenge blocks the request, not the session (see **Keeping the session
+for as long as possible**).
 
 This check runs when the saved profile was reused (the re-sync found the
 session already sitting in it) **and** the provider authenticates with a
