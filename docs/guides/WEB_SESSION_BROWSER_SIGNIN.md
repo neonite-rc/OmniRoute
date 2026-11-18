@@ -152,6 +152,111 @@ the tab counts for the next **Re-sync session**.
 
 ---
 
+## What each site requires — and what the browser sign-in captures
+
+The manual method (DevTools → Network → copy the value) only works if you know
+**which** value each site keeps its session in. Four different places are in
+use across the providers, and the manual instructions differ per site:
+
+| Where the session lives | How you find it by hand                                                     |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| A **cookie**            | DevTools → Application → Cookies, or the `Cookie` header of any request      |
+| **localStorage**        | DevTools → Application → Local Storage → the provider's origin               |
+| **sessionStorage**      | DevTools → Application → Session Storage → the provider's origin             |
+| A **request header**    | DevTools → Network → an authenticated request → the `Authorization` header    |
+
+**The browser sign-in captures all four, automatically.** The capture watches
+the sign-in page and takes each value as soon as it appears:
+
+- every cookie the provider declares — matched by **name and domain**, never
+  by a loose substring, so a cookie from `<domain>.attacker.tld` is never
+  captured;
+- the whole cookie jar of the provider's domain besides the declared cookies
+  (companion cookies such as Grok's `sso-rw` or Cloudflare's `cf_clearance`
+  are what make a captured session work);
+- the provider's `localStorage` and `sessionStorage` keys;
+- the configured request header, read from an authenticated request the page
+  makes after the sign-in.
+
+So the per-site list below is what the **manual** method needs — the button
+needs none of it:
+
+| Provider          | The session lives in                                                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `claude-web`      | cookie `sessionKey` @ `.claude.ai`                                                                                              |
+| `gemini-web`      | cookies `__Secure-1PSID` **and** `__Secure-1PSIDTS` @ `.google.com`                                                              |
+| `grok-web`        | cookie `sso` @ `.grok.com` (plus `sso-rw`, `cf_clearance`)                                                                       |
+| `perplexity-web`  | cookie `__Secure-next-auth.session-token` @ `.perplexity.ai`                                                                      |
+| `poe-web`         | cookie `p-b` @ `.poe.com`                                                                                                        |
+| `duckduckgo-web`  | cookie `duckai` @ `.duckduckgo.com`                                                                                              |
+| `doubao-web`      | cookies `sessionid`, `ttwid`, `s_v_web_id` @ `.dola.com`                                                                          |
+| `v0-vercel-web`   | cookie `__Secure-next-auth.session-token` @ `.v0.dev`                                                                             |
+| `muse-spark-web`  | cookie `session` @ `.meta.ai`                                                                                                    |
+| `adapta-web`      | cookie `__session` @ `.adapta.one`                                                                                               |
+| `veoaifree-web`   | cookie `wordpress_logged_in` @ `.veoaifree.com`                                                                                  |
+| `volcengine-console` | cookies `digest`, `AccountID`, `csrfToken`, `userInfo` @ `.volcengine.com`                                                     |
+| `deepseek-web`    | cookie `user-token` @ `.deepseek.com` **and** `localStorage.userToken`                                                             |
+| `kimi-web`        | `localStorage.access_token` (plus the `kimi-auth` cookie @ `.kimi.com`)                                                             |
+| `blackbox-web`    | cookie `connect.sid` @ `.blackbox.ai` **and** `localStorage.token`                                                                  |
+| `venice-web`      | cookie `venice_session` @ `.venice.ai` **and** `localStorage.token`                                                                 |
+| `chatglm-web`     | cookie `chatglm_session` @ `.chatglm.cn` **and** `localStorage.token`                                                               |
+| `xiaomimimo-web`  | cookie `session` @ `.xiaomimimo.com` **and** `localStorage.access_token`                                                           |
+| `manus-web`       | cookie `manus_session` @ `.manus.im` **and** `localStorage.auth_token`                                                             |
+| `t3-chat-web`     | `localStorage.token`                                                                                                              |
+| `zai-web`         | `localStorage.token`                                                                                                              |
+| `copilot-web`     | the `Authorization` header of an authenticated request                                                                             |
+
+The source of truth is
+`open-sse/services/tokenExtractionConfig.ts` (the login URL and the token
+sources) together with `src/shared/providers/webSessionCredentials.ts` (the
+credential kind and the storage keys). The table above is checked against
+those files by `tests/unit/docs/web-session-requirements-doc.test.ts`, so it
+cannot drift.
+
+### Keeping the session for as long as possible
+
+The saved browser profile **is** the session. It is kept per provider and per
+browser under `<DATA_DIR>/browser-profiles/<provider>/<browser>/`, so a later
+**Re-sync session** reuses it without asking for a password.
+
+The profile is only dropped when the provider **definitively** rejects the
+saved session (a 401/403). Two cases deliberately do **not** drop it:
+
+- a probe that cannot reach the provider (network error, timeout) is
+  inconclusive and never invalidates a working session;
+- a **captcha / anti-bot challenge** is a block on the request, not on the
+  session. The session behind it may still be perfectly valid, so the profile
+  is kept and the operator is told to solve the challenge in the sign-in
+  window. (Before this, a Cloudflare 403 looked exactly like an expired
+  session and wiped a working sign-in.)
+
+---
+
+## When a session expires or a captcha gets in the way
+
+Both problems are tracked server-side and surface as **one dashboard prompt
+per problem** — not one per attempt:
+
+| Situation                                    | What happens                                                                                                                                  |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| The provider rejects the saved session (401/403) | The stale profile is dropped, the problem is recorded and the prompt appears.                                                            |
+| A captcha / anti-bot challenge blocks a sign-in  | The sign-in keeps waiting (solve it in the sign-in window and it continues on its own). The problem is recorded.                              |
+| The problem happens **again** while it is still open | The prompt appears — this is the point where the problem counts as persistent.                                                        |
+| The problem is still open but you already saw the prompt | Nothing happens. The prompt is raised once per problem, not on every attempt.                                                     |
+| You solve it (a successful sign-in)          | The problem is closed and the prompt never comes back.                                                                                        |
+| The problem comes back later                 | It is a **new** problem, so it may prompt again.                                                                                             |
+| You remove the provider                      | Its problems are forgotten — a provider you deleted never prompts again.                                                                     |
+
+An expired session is announced at once (a 401/403 is proof, not a hint). A
+captcha has to come back before it counts: one blocked attempt may just be a
+challenge the operator solved in the window, so it stays silent until the next
+attempt is blocked too.
+
+The prompts live on the **Providers** page — the dashboard polls for them and
+raises a toast.
+
+---
+
 ## Testing it
 
 ### 1. Add a connection (the happy path)
@@ -245,7 +350,10 @@ Sign out at the provider (or let the session expire), then click
 The stale browser profile is deleted, and the **dead credential is not
 re-stored** — the previous working value stays until a real sign-in replaces
 it. A probe that cannot reach the provider is treated as inconclusive and
-never invalidates a working session.
+never invalidates a working session. A probe that comes back with a **captcha
+/ anti-bot challenge** is treated the same way — the profile is kept, because
+the challenge blocks the request, not the session (see **Keeping the session
+for as long as possible**).
 
 This check runs when the saved profile was reused (the re-sync found the
 session already sitting in it) **and** the provider authenticates with a
@@ -381,8 +489,10 @@ into it — so a failed automatic save can be retried from the form.
 | "The sign-in tab was closed before the session was captured." | The tab was closed by hand before the sign-in finished. Click the button again.                                                                                           |
 | "The OmniRoute host has no display…"                          | The host is headless, so the sign-in browser cannot open. Use a virtual display (`xvfb-run npm run dev`) or paste the credential manually.                                |
 | "Login timed out"                                             | The credential never appeared in the browser session. The capture waits up to 5 minutes (2 for `duckduckgo-web`, `t3-chat-web`) — sign in again and retry.                |
+| "A captcha challenge is blocking the sign-in"                  | The provider put a captcha / anti-bot challenge in front of the login. Solve it in the sign-in window (the browser window, or the sign-in view inside the dashboard) and the sign-in continues. |
 | "The browser session did not yield a usable credential"       | The session was captured but the provider expected a different credential kind.                                                                                           |
 | "The saved browser session for this provider has expired."    | The provider rejected the saved session. The stale profile was deleted — sign in again.                                                                                   |
+| "The provider is currently blocking OmniRoute with a captcha" | The provider answered the session probe with a challenge instead of an auth rejection. The saved session was **kept** — solve the challenge and sign in again.        |
 | The browser window does not appear                            | The OmniRoute host has no display (headless server) — the sign-in tab then shows the live view instead.                                                                   |
 | The capture succeeds but requests 401                         | The stored value is not the shape the executor reads. Check `provider_specific_data.cookie` (see **Verify what was stored**).                                             |
 | A Firefox window opens when you expected Chrome               | The window follows the browser the **dashboard** is in, not the host's default. Sign in from a Chrome tab if you want Chrome.                                             |
@@ -403,3 +513,5 @@ into it — so a failed automatic save can be retried from the form.
 - `src/lib/providers/webSessionCredentialPayload.ts` — the credential normaliser.
 - `src/lib/providers/webSessionPersistCapture.ts` — stores a captured session on a connection.
 - `src/lib/providers/webSessionCapture.ts` — the stale-session probe.
+- `src/lib/providers/webSessionIssues.ts` — when a problem deserves a prompt.
+- `src/app/api/providers/web-session-issues/route.ts` — the alert list the dashboard polls.

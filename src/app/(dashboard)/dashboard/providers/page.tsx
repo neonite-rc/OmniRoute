@@ -58,6 +58,7 @@ const ImportProvidersFromFileModal = dynamic(
   { ssr: false }
 );
 import NoAuthProvidersSection from "./components/NoAuthProvidersSection";
+import WebSessionIssueAlerts from "./components/WebSessionIssueAlerts";
 import HighlightableProviderCard from "./components/HighlightableProviderCard";
 import ProviderCountBadge from "./components/ProviderCountBadge";
 import ProviderSummaryCard from "./components/ProviderSummaryCard";
@@ -1916,6 +1917,9 @@ function ProvidersPageContent() {
 export default function ProvidersPage() {
   return (
     <Suspense fallback={null}>
+      {/* Raises the one-time prompt for a web session that expired or is
+          blocked by a captcha. */}
+      <WebSessionIssueAlerts />
       <ProvidersPageContent />
     </Suspense>
   );

@@ -13,6 +13,11 @@
 
 import { buildWebSessionCredentialPayload } from "@/lib/providers/webSessionCredentialPayload";
 import { capturedSessionProbe } from "@/lib/providers/webSessionCapture";
+import {
+  noteCaptchaBlocked,
+  noteSessionExpired,
+  noteSessionHealthy,
+} from "@/lib/providers/webSessionCaptureIssues";
 import { clearBrowserProfile } from "@omniroute/open-sse/services/inAppLoginService.ts";
 import type { LoginResult } from "@omniroute/open-sse/services/inAppLoginService.ts";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error.ts";
@@ -45,6 +50,12 @@ export async function buildWebSessionCaptureResult(
   result: LoginResult
 ): Promise<WebSessionCaptureResult> {
   if (!result.success || !result.credentials) {
+    // A captcha that blocked the sign-in is recorded so the dashboard can
+    // prompt when it keeps coming back — the operator sees "timed out"
+    // otherwise, with no hint about what to fix.
+    if (result.errorCode === "captcha_required") {
+      noteCaptchaBlocked(provider, result.error);
+    }
     return {
       success: false,
       // Hard Rule #12: the browser failure may still carry a raw Playwright
@@ -69,7 +80,23 @@ export async function buildWebSessionCaptureResult(
 
   if (result.alreadySignedIn) {
     const validation = await capturedSessionProbe.validate(provider, payload);
+    if (validation.challengeBlocked) {
+      // The provider refused the probe with an anti-bot challenge, not with an
+      // auth rejection. The session behind it may still be alive, so the
+      // saved profile is KEPT — wiping it would throw away a working sign-in
+      // over a challenge the operator can solve.
+      noteCaptchaBlocked(provider, "The provider refused the saved session with a bot challenge.");
+      return {
+        success: false,
+        error:
+          "The provider is currently blocking OmniRoute with a captcha / anti-bot challenge. " +
+          "Solve it in the sign-in window and run the sign-in again — the saved session was kept.",
+      };
+    }
     if (validation.expired) {
+      // A definitive 401/403: the session really is dead, so the stale
+      // profile is dropped and the next attempt asks for a real sign-in.
+      noteSessionExpired(provider, "The provider rejected the saved browser session.");
       clearBrowserProfile(provider);
       return {
         success: false,
@@ -78,6 +105,9 @@ export async function buildWebSessionCaptureResult(
       };
     }
   }
+
+  // The sign-in worked — any open problem for this provider is solved.
+  noteSessionHealthy(provider);
 
   return {
     success: true,

@@ -1,6 +1,7 @@
 import { WEB_COOKIE_PROVIDERS } from "@/shared/constants/providers";
 import { validateWebCookieProvider } from "@/lib/providers/validation/webCookie";
 import { updateProviderConnection } from "@/lib/db/providers";
+import { recordWebSessionIssue } from "@/lib/providers/webSessionIssues";
 
 /**
  * Verify-only background probe for web-cookie connections (#11488).
@@ -53,11 +54,29 @@ function readCredential(conn: WebCookieProbeConnection): string {
   return "";
 }
 
+/**
+ * Whether the probe was refused by a bot challenge.
+ *
+ * The flag is only set by the generic web-cookie probe, so it is read
+ * structurally — the probe's result type is a union of every validator's
+ * shape and only one of them carries the flag.
+ */
+function isChallengeBlocked(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false;
+  return (result as { challengeBlocked?: unknown }).challengeBlocked === true;
+}
+
 function isSessionExpiredResult(result: {
   valid: boolean;
   error?: string | null;
   errorCode?: string | null;
+  challengeBlocked?: boolean;
 }): boolean {
+  // A bot challenge is NOT an expiry. The upstream answered 403 with a
+  // challenge page, so the cookie behind it may still be valid — marking the
+  // connection expired here would kill a working session over a challenge the
+  // operator can solve.
+  if (result.challengeBlocked) return false;
   return (
     result.valid === false &&
     (result.errorCode === "AUTH_007" ||
@@ -112,6 +131,27 @@ export async function checkWebCookieConnectionIfNeeded(params: {
   if (result.unsupported) {
     // No honest probe exists for this provider (registry-less / no /models API):
     // keep the row untouched except for the cadence stamp.
+    await persist(conn.id, { lastHealthCheckAt: now });
+    return true;
+  }
+
+  if (isChallengeBlocked(result)) {
+    // The upstream put a captcha / anti-bot challenge in front of the probe.
+    // The session may still be alive, so the connection keeps its state — but
+    // the problem is recorded, so the dashboard can prompt when the challenge
+    // keeps coming back.
+    logWarn(
+      `${logPrefix} ${label} blocked by an anti-bot challenge; keeping the session and retrying next interval`
+    );
+    try {
+      recordWebSessionIssue({
+        providerId: String(conn.provider),
+        kind: "captcha_blocked",
+        detail: "The upstream refused the session probe with a bot challenge.",
+      });
+    } catch (error) {
+      logWarn(`${logPrefix} could not record the challenge for ${label}: ${error}`);
+    }
     await persist(conn.id, { lastHealthCheckAt: now });
     return true;
   }
