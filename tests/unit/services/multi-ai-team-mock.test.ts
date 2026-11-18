@@ -202,10 +202,17 @@ test("team: the pool scales up to its bound and never exceeds it", async () => {
 test("team: the admission gate admits as many concurrent agent requests as the byte budget allows", async () => {
   // The SHIPPED budget formula: a quarter of the host's memory ceiling,
   // divided by the transient amplification factor, floored at 8 MiB.
-  const budget = computeIngestByteBudget({
+  const hostBudget = computeIngestByteBudget({
     heapSizeLimitBytes: v8.getHeapStatistics().heap_size_limit,
   });
-  assert.ok(budget.bytes > 0, "the budget must be positive");
+  assert.ok(hostBudget.bytes > 0, "the budget must be positive");
+
+  // The gate is measured against a BOUNDED budget: the gate's arithmetic is
+  // identical for any budget, and holding the host's whole budget in request
+  // bodies at once (hundreds of MiB) would make this test the heaviest
+  // process in a suite that runs 20 files in parallel. The host's real
+  // capacity is reported alongside it.
+  const TEST_BUDGET_BYTES = 16 * 1024 * 1024;
 
   // A realistic coding-agent turn (big system prompt + tool schemas).
   const bodySize = 400_000;
@@ -214,10 +221,10 @@ test("team: the admission gate admits as many concurrent agent requests as the b
   // The gate charges the CONTENT LENGTH, so the expectation is computed from
   // the real request size — the JSON envelope counts too.
   const requestBytes = Buffer.byteLength(raw);
-  const expectedAdmitted = Math.max(1, Math.floor(budget.bytes / requestBytes));
+  const expectedAdmitted = Math.max(1, Math.floor(TEST_BUDGET_BYTES / requestBytes));
 
   const controller = new ChatAdmissionController(Number.MAX_SAFE_INTEGER, undefined, 0, noop, {
-    maxInflightBytes: budget.bytes,
+    maxInflightBytes: TEST_BUDGET_BYTES,
     checkPressureSeverity: () => "normal",
   });
 
@@ -245,7 +252,7 @@ test("team: the admission gate admits as many concurrent agent requests as the b
   assert.equal(
     admitted.length,
     expectedAdmitted,
-    `expected ${expectedAdmitted} admitted (budget ${budget.bytes} / request ${requestBytes}), got ${admitted.length}`
+    `expected ${expectedAdmitted} admitted (budget ${TEST_BUDGET_BYTES} / request ${requestBytes}), got ${admitted.length}`
   );
 
   for (const result of results) {
@@ -253,10 +260,14 @@ test("team: the admission gate admits as many concurrent agent requests as the b
   }
   assert.equal(controller.inflightBytes, 0, "every charge is released");
 
+  const hostCapacity = Math.floor(hostBudget.bytes / requestBytes);
   console.log(
-    `[team] admission gate: budget ${(budget.bytes / 1024 / 1024).toFixed(1)} MiB ` +
-      `(${budget.source}), ${Math.round(requestBytes / 1024)} KiB agent turns → ` +
-      `${admitted.length} concurrent requests admitted`
+    `[team] admission gate: ${admitted.length} concurrent ` +
+      `${Math.round(requestBytes / 1024)} KiB agent turns admitted against a ` +
+      `${(TEST_BUDGET_BYTES / 1024 / 1024).toFixed(0)} MiB budget ` +
+      `(the gate admits floor(budget / body)); the host budget is ` +
+      `${(hostBudget.bytes / 1024 / 1024).toFixed(1)} MiB (${hostBudget.source}) → ` +
+      `~${hostCapacity} such turns`
   );
 });
 

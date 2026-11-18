@@ -42,9 +42,12 @@ wave. Never run dependent work in parallel.
 
 So the **effective width of one request** is
 `min(maxConcurrency, distinct providers available, admission budget)`.
-On the reference host the admission gate admits hundreds of concurrent agent
-turns, so in practice **the pool bound and the provider lanes are what you
-feel** — not the gate.
+The admission gate admits exactly `floor(budget / body)` concurrent heavy
+requests — the mock measures that against a bounded budget (so the test stays
+a small citizen of the suite) and reports the host budget alongside it. On the
+reference host that budget is ~130–260 MiB, i.e. **hundreds of concurrent
+agent turns**, so in practice **the pool bound and the provider lanes are what
+you feel** — not the gate.
 
 Raising the count costs memory (every in-flight request buffers a body).
 Prefer a wider *pool* over more *processes*; prefer waiting (`queueMs`) over
