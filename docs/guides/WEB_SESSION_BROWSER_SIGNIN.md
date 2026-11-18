@@ -513,3 +513,5 @@ into it — so a failed automatic save can be retried from the form.
 - `src/lib/providers/webSessionCredentialPayload.ts` — the credential normaliser.
 - `src/lib/providers/webSessionPersistCapture.ts` — stores a captured session on a connection.
 - `src/lib/providers/webSessionCapture.ts` — the stale-session probe.
+- `src/lib/providers/webSessionIssues.ts` — when a problem deserves a prompt.
+- `src/app/api/providers/web-session-issues/route.ts` — the alert list the dashboard polls.
